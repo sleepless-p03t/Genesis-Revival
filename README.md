@@ -19,7 +19,7 @@ git clone https://github.com/sleepless-p03t/Genesis-Revival.git
 * ruby
 
 ```
-sudo apt get install ruby
+sudo apt-get install ruby
 ```
 
 ##### Gems:
