@@ -114,9 +114,9 @@ end
 def testr
 	# testr needs to be set, Genesis does not handle this internally
 	if RuntimeStore.get_val_of("testr") != nil
-		Output.err_msg("Variable testr not set!", "")
-	else
 		Output.info_msg("testr =", RuntimeStore.get_val_of("testr"))
+	else
+		Output.err_msg("Variable testr not set!", "")
 	end
 end
 
