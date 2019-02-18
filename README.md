@@ -122,8 +122,8 @@ end
 
 def testo
 	# testo is optional, only does something if it's set
-	if RuntimeStore.get_val_of("parting") != nil
-		puts RuntimeStore.get_val_of("parting")
+	if RuntimeStore.get_val_of("testo") != nil
+		puts RuntimeStore.get_val_of("testo")
 	end
 end
 ```
