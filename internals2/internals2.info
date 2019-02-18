@@ -1,5 +1,5 @@
-Developer:
-Module Name: 
-Module Info: 
+Developer: sleepless-p03t
+Core Name: internals2
+Core Info: A rewrite of the internals of Genesis6
 Package Dependencies: 
-Gem Dependencies: 
+Gem Dependencies: json, colorize

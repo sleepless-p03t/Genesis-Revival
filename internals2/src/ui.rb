@@ -3,8 +3,10 @@
 require 'io/console'
 require 'colorize'
 
-class String
+# This script handles the icon display
 
+class String
+	# converts file to 2D character array
 	def to_2d
 		a = self.split("\n")
 		b = []
@@ -91,6 +93,7 @@ class Color
 	end
 end
 
+# This class handles output rules for the icon displays
 class Rules
 
 	@rules = Hash.new
@@ -118,6 +121,7 @@ class Rules
 	end
 end
 
+# This handles animating a typewriter style animation for icon display
 class Animation
 
 	@@alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`~!@\#$%^&*()-_=+[{]}\\|:;'\",<.>/?".split(//)
@@ -147,7 +151,8 @@ class Animation
 			puts
 		end
 	end
-
+	
+	# this function centers icons in the terminal window and outputs them
 	def animate(color, style)
 		puts `tput civis`
 		system("stty -icanon -echo")
@@ -186,6 +191,7 @@ class Animation
 	end
 end
 
+# The output suppression function was found somewhere on GitHub, not my own function
 class Output
 	
 	def self.suppress_output
@@ -206,6 +212,7 @@ class Output
 		retval
 	end
 
+	# output a colorized info message
 	def self.info_msg(msg, var)
 		print "[".light_white.bold
 		print "+".light_green.bold
@@ -214,6 +221,7 @@ class Output
 		puts "#{var}".light_blue.bold
 	end
 
+	# output a colorized error message
 	def self.err_msg(msg, var)
 		print "[".light_red
 		print "!".light_red.bold
