@@ -1,5 +1,5 @@
 # Genesis: Revival
-## Genesis6.1
+## (Genesis6.1)
 
 Genesis at its core is a bare-bones command line interface written in Ruby. Its
 functionality is determined by modules and plugins. Although this dynamic approach
