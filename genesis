@@ -1,0 +1,282 @@
+#!/usr/bin/ruby
+
+begin
+	require 'highlander'
+rescue RuntimeError => e
+	puts "Genesis already running. Aborting"
+	exit
+end
+
+require 'readline'
+require 'colorize'
+require 'fileutils'
+
+# routine to count words in string
+class String
+	
+	def count_words
+		n = 0
+		scan(/\b\S+\b/) { n += 1 }
+		n
+	end
+end
+
+# persistent history handler
+class History
+	
+	# write history file
+	def self.write_history(local_history)
+		File.open(".history", "w+") do |f|
+			local_history.each { |element| f.puts(element) }
+		end
+
+		system("cat .history | sed '/^\s*$/d' | awk '!(f == $0){print} {f=$0}' > .h")
+		system("mv .h .history")
+	end
+	
+	#read history file
+	def self.get_history
+		return File.readlines(".history").join(",").gsub(",", "").split("\n")
+	end
+end
+
+# extract scripts and dependencies from gmd files
+
+def extract_core
+	# extract core scripts
+	system("bash", "-c", <<~EOS
+		root=`pwd`
+		cp $root/.core/internals/*.gmd $root/.runtime/
+		cd $root/.runtime
+		while read -r line; do
+			mv $line.gmd $line.tar.bz2
+			tar -xjSf $line.tar.bz2
+			mv $line/src/* .
+			rm -rf src
+			rm *.bz2
+			rm -rf $line/
+		done< <(ls *.gmd | awk -F'.' '{ print $1 }')
+		cd $root
+	EOS
+	)
+	
+	# load core scripts into memory
+	Dir["#{File.dirname(__FILE__)}/.runtime/*.rb"].each { |f| load(f) }
+	# run setup for RuntimeStore
+	RuntimeStore.setup
+
+	# extract module scripts
+	system("bash", "-c", <<~EOS
+		root=`pwd`
+		echo -n '' > $root/.msrc
+		cp $root/modules/*.gmd $root/.runtime/
+		cd $root/.runtime/
+		while read -r line; do
+			echo "$line" >> $root/.msrc
+			mv $line.gmd $line.tar.bz2
+			tar -xjSf $line.tar.bz2
+			mv $line/src/* .
+			rm -rf src
+			rm *.bz2
+			rm -rf $line/
+		done< <(ls *.gmd | awk -F'.' '{ print $1 }')
+		cd $root
+	EOS
+	)
+
+	# initialize module data
+	File.open('.msrc').read.each_line do |line|
+		RuntimeStore.init_module(line.gsub("\n", ""))
+	end
+
+	system("rm .msrc")
+end
+
+# Genesis already running?
+system("mkdir .runtime")
+# sets up runtime "environment"
+extract_core
+	
+flag = ARGV[0]
+
+# ignore ctrl+c
+trap("INT", "SIG_IGN")
+
+# icon output
+if flag != '-q'
+	cols = `tput cols | tr -d '\n'`.to_i
+	if cols > 96
+		icon = 1 + rand(5)
+	else
+		icon = 1 + rand(3)
+	end
+
+	path = "#{Dir.pwd}/.core/icons"
+	a = Animation.new("#{path}/icon#{icon}")
+	if icon == 2 || icon == 4
+		a.add_rule('g', Color.HIDDEN)
+	end
+	if icon == 2
+		a.add_rule("!g", Color.LIGHT_BLUE)
+	elsif icon == 4
+		a.add_rule("!g", Color.RANDOM)
+	elsif icon == 1
+		a.add_rule('*', Color.WHITE)
+		a.add_rule('!*', Color.LIGHT_RED)
+	elsif icon == 3
+		a.add_rule('0', Color.HIDDEN)
+		a.add_rule('!0', Color.LIGHT_YELLOW)
+	elsif icon == 5
+		a.add_rule('r', Color.HIDDEN)
+		a.add_rule('!r', Color.RANDOM)
+	end
+	if flag == "-s"
+		a.animate(Color.LIGHT_WHITE, "static")
+	elsif flag != "-r"
+		a.animate(Color.LIGHT_WHITE, nil)
+	end
+end
+
+# Dynamic tab completion control system
+CompletionProc = Proc.new do |str|
+	current = Readline.line_buffer
+		
+	# First two conditions ensure genesis doesn't crash when attempting tab completion after unknown commands
+	if RuntimeStore.get_module == "" && current != "" && current != " " && !RuntimeStore.get_cmds.any? { |s| s.include?(current.split(' ')[0]) }
+		[]
+	elsif current != "" && current != " " && RuntimeStore.get_module != "" && !RuntimeStore.get_cmds.any? { |s| s.include?(current.split(' ')[0]) } && current.split(' ')[0] != "set"
+		[]
+	elsif current.start_with?("load ")
+		mod = current.split(" ")[1]
+		list = RuntimeStore.get_modules
+		if list.include?(mod)
+			[]
+		else
+			list.grep(/^#{Regexp.escape(str)}/)
+		end
+	elsif current.start_with?("set ") || current.start_with?("set")
+		var = current.split(" ")[1]
+		list = RuntimeStore.get_vars
+		if !list.include?(var)
+			list.grep(/^#{Regexp.escape(str)}/)
+		elsif current.count_words == 3
+			[]
+		else
+			[]
+		end
+	elsif RuntimeStore.get_cmds_single.include?(current.gsub(" ", "")) 
+		[]
+	elsif current.start_with?("list ")
+		opt = current.split(" ")[1]
+		list = RuntimeStore.get_list_opts
+		if list.include?(opt)
+			[]
+		else
+			list.grep(/^#{Regexp.escape(str)}/)
+		end
+	elsif !RuntimeStore.get_cmds.include?(current.gsub(" ", "")) && RuntimeStore.get_module == ""
+		RuntimeStore.get_cmds.grep(/^#{Regexp.escape(str)}/)
+	elsif !RuntimeStore.get_cmds.include?(current.gsub(" ", "")) && RuntimeStore.get_module != ""
+		RuntimeStore.get_cmds.grep(/^#{Regexp.escape(str)}/)
+	else
+		[]
+	end
+end
+
+Readline.completion_append_character = " "
+Readline.completer_word_break_characters = " "
+
+Readline.completion_proc = CompletionProc
+# add history file data to runtime history
+if File.file?(".history")
+	History.get_history.each { |h| Readline::HISTORY.push(h) }
+else
+	system("echo > .history")
+end
+
+prompt = "genesis"
+_module = ""
+
+# Dynamic input processing and execution
+while buf = Readline.readline("\e[1;37m#{prompt} \e[1;33m#{_module}\e[1;37m> \e[0m", true)
+	
+	Readline::HISTORY.to_a
+	if buf.start_with?("exit")
+		History.write_history(Readline::HISTORY.to_a)
+		system("rm -rf .runtime/")
+		break
+	end
+
+	if buf.start_with?("clear")
+		print `clear`
+	elsif buf.start_with?("cls")
+		print `printf '\033c'`
+	elsif buf.start_with?("load")
+		mod = buf.split(" ")[1]
+		if mod == "" || mod == nil
+			Output.err_msg("Missing module", "")
+		elsif RuntimeStore.get_modules.include?(mod)
+			if RuntimeStore.get_module != ""
+				m = RuntimeStore.get_module
+				RuntimeStore.unload_module
+				Output.info_msg("Unloaded module:", m)
+			end
+			RuntimeStore.load_module(mod)
+			Output.info_msg("Loaded module:", mod)
+			_module = "#{RuntimeStore.get_module} "
+		else
+			Output.err_msg("Unknown module: ", mod)
+		end
+	elsif buf.start_with?("set ")
+		if RuntimeStore.get_module == ""
+			Output.err_msg("Unknown command: ", "set")
+		else
+			var = ""
+			val = ""
+			if buf.count_words == 2
+				var = buf.split(" ")[1]
+			elsif buf.count_words == 1
+				var = ""
+				val = ""
+			else
+				vset = buf.split(" ")
+				var = vset[1]
+				vset.shift
+				vset.shift
+				val = vset.join(',').gsub(',', ' ').gsub("  ", ", ")
+			end
+			RuntimeStore.set_var(var, val)
+		end
+	elsif buf.start_with?("unload")
+		if RuntimeStore.get_module == ""
+			Output.err_msg("Unknown command: ", "unload")
+		else
+			RuntimeStore.unload_module
+			Output.info_msg("Unloaded module:", _module)
+			_module = ""
+		end
+	elsif buf.start_with?("list")
+		if buf.count_words == 1
+			Output.err_msg("Missing option for", "list")
+		else
+			opt = buf.split(" ")[1]
+			if opt == "modules"
+				RuntimeStore.list_modules
+			elsif opt == "cmds"
+				RuntimeStore.list_commands
+			elsif opt == "vars"
+				if RuntimeStore.get_module == ""
+					Output.err_msg("Unknown list option:", vars)
+				else
+					RuntimeStore.list_vars
+				end
+			end
+		end
+	elsif RuntimeStore.get_module != ""
+		RuntimeStore.exec_module(buf.split(" ")[0])
+	elsif buf == "" || buf.gsub(/[ \t]/, "") == ""
+		puts
+	else
+		Output.err_msg("Unknown command: ", buf)
+	end
+end

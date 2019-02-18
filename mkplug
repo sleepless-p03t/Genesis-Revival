@@ -1,0 +1,208 @@
+#!/bin/bash
+
+function verify_dependencies
+{
+	psuccess=1
+	missing=()
+	echo "Checking package dependencies"
+	while read -r line; do
+		st=2
+		# 2: dpkg error
+		while [ $st -eq 2 ]; do
+			dpkg -s $line &> /dev/null
+			st=$?
+			# 0: found
+			if [ $st -eq 0 ]; then
+				echo -e "[\e[1;37m✔\e[0m] $line"
+			# 1: not found
+			elif [ $st -eq 1 ]; then
+				psuccess=0
+				echo -e "[\e[1;31m✖\e[0m] \e[1;31m$line\e[0m"
+				missing+=( $line )
+			fi
+		done
+	done< <(grep 'Package Dependencies' $1/$1.info | sed 's/ //g' | awk -F':' '{ $1=""; print }' | sed 's/,/\n/g')
+
+	if [ $psuccess -eq 0 ]; then
+		echo
+		echo "Missing the following packages:"
+		for d in ${missing[@]}; do
+			echo "- $d"
+		done
+
+		lst=""
+		for d in ${missing[@]}; do
+			lst="$lst $d"
+		done
+
+		echo
+		echo "You can install them with sudo apt-get install$lst"
+		echo
+	fi
+	
+	gsuccess=1
+	missing=()
+	echo "Checking gem dependencies"
+	while read -r line; do
+		if [ -e $line ]; then continue; fi
+
+		found=`gem list $line -i`
+		if [[ "$found" == "true" ]]; then
+			echo -e "[\e[1;37m✔\e[0m] $line"
+		elif [[ "$found" == "false" ]]; then
+			gsuccess=0
+			echo -e "[\e[1;31m✖\e[0m] \e[1;31m$line\e[0m"
+			missing+=( $line )
+		fi
+	done< <(grep 'Gem Dependencies' $1/$1.info | sed 's/ //g' | awk -F':' '{ $1=""; print }' | sed 's/,/\n/g')
+
+	if [ $gsuccess -eq 0 ]; then
+		echo
+		echo "Missing the following gems:"
+		for d in ${missing[@]}; do
+			echo "- $d"
+		done
+
+		lst=""
+		for d in ${missing[@]}; do
+			lst="$lst $d"
+		done
+		
+		echo
+		echo "You can install them with sudo gem install$lst"
+	fi
+
+	if [ $psuccess -eq 0 ] || [ $gsuccess -eq 0 ]; then
+		echo "Missing dependencies. Please install them then run \`mkplug install $1'"
+		exit 3
+	fi	
+}
+
+function template
+{
+	local _gdm="$1"
+	local gdm="$_gdm"
+	local gdm="$(tr '[:lower:]' '[:upper:]' <<< ${gdm:0:1})${gdm:1}"
+	cat > $_gdm/$_gdm.html <<-EOF
+<html>
+
+<head>
+	<title>Help - $gdm</title>
+	<link rel="icon" href="imgs/gecko.png" />
+	<link rel="stylesheet" type="text/css" href="css/sunburst.css" />
+	<link rel="stylesheet" type="text/css" href="css/style.css" />
+	<script src="https://cdn.rawgit.com/google/code-prettify/master/loader/run_prettify.js"></script>
+</head>
+
+<body>
+	<div id="main" class="scrollable">
+		<div class="content-wrapper">
+			<div class="content">
+				<div class="centered">
+					<div class="contents">
+						<h1>$gdm</h1>
+						<!-- Insert readme info here-->
+
+						<!-- If you want to give a code example use:
+						<pre class="prettyprint linenums">
+code here</pre>
+						-->
+						<!-- If you want to use bullets:
+						<ul class="info">
+							<li>...</li>
+							<li>...</li>
+						</ul>
+						-->
+						<!-- nested bullets:
+						<ul class="info">
+							<li>...</li>
+							<ul id="info2">
+								<li>...</li>
+							</ul>
+							<li>...</li>
+						</ul>
+						-->
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</body>
+</html>
+	EOF
+}
+
+if [[ "$1" == "" ]]; then
+	echo -e "Usage\n\t mkplug <plugin name>"
+	echo -e "\tmkplug install <plugin name>"
+	exit 1
+fi
+
+if [[ "$1" == "install" ]]; then
+	if [ -z $2 ]; then
+		echo "Missing plugin to install"
+		exit 1
+	fi
+
+	if [ ! -d $2 ]; then
+		echo "Plugin not found: $2"
+		exit 1
+	fi
+
+	verify_dependencies $2
+
+	echo "Compressing plugin $2 and adding to genesis"
+
+	tar -cjSf $2.tar.bz2 $2
+	mv $2.tar.bz2 $2.gmd
+	mv $2.gmd .core/plugins/
+	exit 0
+fi
+
+if [ -d $1 ]; then
+	echo "Plugin already exists. Aborting"
+	exit 1
+fi
+
+mkdir -p $1/src/
+
+cat > $1/$1.info<<EOF
+Developer:
+Plugin Name: 
+Plugin Info: 
+Package Dependencies: curl, xdotool, ruby, mingw-w64
+Gem Dependencies: rb-readline, colorize
+EOF
+
+cat > $1/src/$1.rb <<EOF
+#!/bin/ruby
+
+def pname
+	"$1"
+end
+
+# add list options to tab completion for this plugin
+def list_opts
+	[ ]
+end
+
+# "var0" => 1 means required
+# "var1" => 0 means optional
+
+# define any variables that are required for this plugin
+def vars
+	{ }
+end
+
+# add any functions/classes/modules here that can be used in modules
+EOF
+
+template $1
+
+echo "Module skeleton directory:$1 created"
+echo "Please edit $1/$1.info and add scripts and any dependencies in $1/src/"
+echo "List necessary deb pkgs (apt-get capable) in file $1/$1.info, separated by commas"
+echo "List necessary gems in file $1/$1.info, separated by commas" 
+echo "Edit $1/$1.html to explain your plugin"
+
+echo "To pack your plugin into an archive and add it to genesis, run mkplug install $1"

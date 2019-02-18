@@ -1,0 +1,15 @@
+load test6 
+list vars 
+list cmds 
+exit
+load test6 
+exit
+load test6 
+set greeting Hello, World!
+hi
+list vars 
+set parting Goodbye!
+bye 
+unload 
+list cmds 
+exit
