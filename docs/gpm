@@ -1,0 +1,633 @@
+#!/bin/bash
+
+URL="https://raw.githubusercontent.com/sleepless-p03t/genesis6/master/"
+
+# cleanup directory stack at exit and exec bash to register bashrc changes 
+function cleanup
+{
+	while read -r line; do
+		if [ $line -ne 1 ]; then
+			popd > /dev/null
+		fi
+	done< <(dirs -p | nl | awk '{ print $1 }')
+}
+
+# print info message
+function pinfo
+{
+	local msg="$1"
+	echo -en "\e[0;37m["
+	echo -en "\e[1;34mi"
+	echo -en "\e[0;37m] "
+	echo -e "$msg\e[0m"
+}
+
+#print error message
+function perr
+{
+	local msg="$1"
+	echo -en "\e[0;37m["
+	echo -en "\e[1;31m!"
+	echo -en "\e[0;37m] "
+	echo -e "$msg\e[0m"
+}
+
+#print install message
+function pinstall
+{
+	local msg="$1"
+	echo -en "\e[0;37m["
+	echo -en "\e[1;32m+"
+	echo -en "\e[0;37m] "
+	echo -e "$msg\e[0m"
+}
+
+function plocal
+{
+	local msg="$1"
+	echo -en "\e[0;37m["
+	echo -en "\e[1;36m*"
+	echo -en "\e[0;37m] "
+	echo -e "$msg\e[0m"
+}
+
+#install ruby gem if not already installed
+function gem_install
+{
+	local gem="$1"
+	local found=`gem list -i "^$gem$"`
+	if [[ "$found" == "false" ]]; then
+		sudo gem install "$gem"
+		echo
+	else
+		pinfo "Gem $gem already installed"
+	fi
+}
+
+#install deb package if not already installed
+function pkg_install
+{
+	local pkg="$1"
+	dpkg-query -l "$pkg" &> /dev/null
+	if [ $? -eq 1 ]; then
+		pinstall "$pkg not installed. Installing\n"
+		sudo apt-get install $pkg
+	else
+		pinfo "$pkg already installed"
+	fi
+}
+
+function web_error
+{
+	local _url="$1"
+	if ! curl -s -o /dev/null --fail -r 0-0 "$_url"; then
+		echo
+		perr "gpm failed due to network issues. Please try again later"
+		pinfo "If issues persist, please contact sleepless at sleepless.genesis6@gmail.com"
+		exit 1
+	fi
+}
+
+function list_all_modules
+{
+	web_error "$URL/master.list"
+	curl -s $URL/master.list -o master.list
+	pinfo "All modules:"
+	while read -r line; do
+		if [[ "$line" == "BEGIN_"* ]]; then
+			break
+		elif [[ "$line" != "gem:"* ]] && [[ "$line" != "deb:"* ]]; then
+			pushd $HOME/genesis6/modules > /dev/null
+			if [ -f "$line.gem" ]; then
+				plocal "$line"
+			else
+				pinstall "$line"
+			fi
+			popd > /dev/null
+		fi
+	done< <(cat master.list | sed '/^\s*$/d')
+	rm master.list
+}
+
+function list_installed_modules
+{
+	pinfo "Installed modules:"
+	pushd $HOME/genesis6/modules > /dev/null
+	while read -r line; do
+		plocal "$line"
+	done< <(ls)
+	popd > /dev/null
+}
+
+function list_available_modules
+{
+	web_error "$URL/master.list"
+	curl -s $URL/master.list -o master.list
+	pinfo "Available modules:"
+	while read -r line; do
+		if [[ "$line" == "BEGIN_"* ]]; then
+			break
+		elif [[ "$line" != "gem:"* ]] && [[ "$line" != "deb:"* ]]; then
+			pushd $HOME/genesis6/modules > /dev/null
+			if [ ! -f "$line.gem" ]; then
+				pinstall "$line"
+			fi
+			popd > /dev/null
+		fi
+	done< <(cat master.list | sed '/^\s*$/d')
+	rm master.list
+}
+
+#install all available modules
+function install_all
+{
+	pinstall "Installing all modules and dependencies"
+	web_error "$URL/master.list"
+	curl -s "$URL/master.list" -o master.list
+
+	while read -r line; do
+		if [[ "$line" == "BEGIN_"* ]]; then
+			break
+		elif [[ "$line" == "gem:"* ]]; then
+			_gem=`echo "$line" | awk -F':' '{ print $NF }'`
+			gem_install "$_gem"
+		elif [[ "$line" == "deb:"* ]]; then
+			_deb=`echo "$line" | awk -F':' '{ print $NF }'`
+			pkg_install "$_deb"
+		else
+			if [ ! -f "$HOME/genesis6/modules/$line.gem" ]; then
+				echo -en "\e[0;37mInstalling module $line..."
+				pushd $HOME/genesis6 > /dev/null
+				web_error "$URL/modules/$line.gem"
+				curl -s "$URL/modules/$line.gem" -o "$line.gem"
+				mv "$line.gem" modules/
+				popd > /dev/null
+				while read -r files; do
+					directory=`echo "${files%/*}"`
+					file=`echo "${files##*/}"`
+					pushd $HOME/genesis6 > /dev/null
+					mkdir -p $directory
+					web_error "$URL/$files"
+					curl -s $URL/$files -o $file
+					mv "$file" "$directory"
+					popd > /dev/null
+				done< <(awk "/BEGIN_$line/{flag=1;next}/END_$line/{flag=0}flag" master.list)
+				echo -e "\b\b\b [\e[1;32mdone\e[0;37m]\e[0m"
+			else
+				pinfo "$line already installed"
+			fi
+		fi
+	done< <(cat master.list | sed '/^\s*$/d')
+
+	rm master.list
+	pinfo "Finished installing modules"
+}
+
+#install individual module (if not already installed)
+function install_module
+{
+	local mod="$1"
+	
+	if [ -f "$HOME/genesis6/modules/$mod.gem" ]; then
+		pinfo "$mod already installed"
+	else
+		web_error "$URL/master.list"
+		curl -s $URL/master.list -o master.list
+		if grep -Fxq "$mod" master.list; then
+			echo -en "\e[0;37mInstalling module $mod..."
+			while read -r line; do
+				if [[ "$line" == "BEGIN_"* ]]; then
+					break
+				elif [[ "$line" == "gem:"* ]]; then
+					_gem=`echo "$line" | awk -F':' '{ print $NF }'`
+					gem_install "$_gem"
+				elif [[ "$line" == "deb:"* ]]; then
+					_deb=`echo "$line" | awk -F':' '{ print $NF }'`
+					pkg_install "$_deb"
+				elif [[ "$line" == "$mod" ]]; then
+					pushd $HOME/genesis6 > /dev/null
+					web_error "$URL/master.list"
+					curl -s "$URL/modules/$line.gem" -o "$line.gem"
+					mv "$line.gem" modules/
+					popd > /dev/null
+					while read -r files; do
+						directory=`echo "${files%/*}"`
+						file=`echo "${files##*/}"`
+						pushd $HOME/genesis6 > /dev/null
+						mkdir -p $directory
+						web_error "$URL/$files"
+						curl -s $URL/$files -o $file
+						mv "$file" "$directory"
+						popd > /dev/null
+					done< <(awk "/BEGIN_$line/{flag=1;next}/END_$line/{flag=0}flag" master.list)
+					echo -e "\b\b\b [\e[1;32mdone\e[0;37m]\e[0m"
+					break
+				fi
+			done< <(cat master.list | sed '/^\s*$/d')
+			pinfo "Module installed successfully"
+		else
+			perr "Module not found: $mod"
+		fi
+		rm master.list
+	fi
+}
+
+# remove all modules
+function remove_all
+{
+	pinfo "Removing all modules"
+	pushd $HOME/genesis6 > /dev/null
+	while read -r line; do
+		local _mod=`echo $line | awk -F'.' '{ print $1 }'`
+		if [ -d $_mod ]; then
+			rm -rf $_mod
+		fi
+
+		rm modules/$line
+	done< <(ls modules/)
+	popd > /dev/null
+	pinfo "All modules removed"
+}
+
+# remove a module
+function remove_module
+{
+	local _mod="$1"
+	pushd $HOME/genesis6 > /dev/null
+	if [ ! -f "modules/$_mod.gem" ]; then
+		perr "Module not found: $_mod"
+	elif [ -d "$_mod" ]; then
+		pinfo "Removing module: $_mod"
+		rm -rf "$_mod"
+		rm "modules/$_mod.gem"
+	else
+		rm "modules/$_mod.gem"
+	fi
+	popd > /dev/null
+	pinfo "Removed module successfully"
+}
+
+#install the core of genesis
+function install_core
+{
+	mkdir -p $HOME/genesis6/modules
+	mkdir -p $HOME/genesis6/.core/gems
+	mkdir -p $HOME/genesis6/.core/icons
+
+	pinfo "Preconfiguring wine and multi-arch"
+	multiarch=`wine cmd /c "exit" 2>&1 | grep '"dpkg --add-architecture i386"'`
+	_wine32=`wine cmd /c "exit" 2>&1 | grep '"apt-get install wine32"'`
+
+	if [[ "$multiarch" != "" ]]; then
+		pinstall "Adding multi-arch i386"
+		sudo dpkg --add-architecture i386
+		sudo apt-get update
+	fi
+
+	if [[ "$_wine32" != "" ]]; then
+		pinstall "wine32 not installed. Installing\n"
+		sudo apt-get install wine32
+	else
+		pinfo "wine32 already installed"
+	fi
+	
+	pinfo "Setting up curl"
+	pkg_install "curl"
+	
+	pinfo "Installing necessary gems"
+	gem_install "colorize"
+	gem_install "rb-readline"
+
+	echo -en "\e[0;37mDownloading Genesis core..."
+	pushd $HOME/genesis6 > /dev/null
+	web_error "$URL/genesis"
+	curl -s $URL/genesis -o genesis
+	web_error "$URL/gecko.png"
+	curl -s $URL/gecko.png -o gecko.png
+	web_error "$URL/mkmod"
+	curl -s $URL/mkmod -o mkmod
+	web_error "$URL/bgem"
+	curl -s $URL/bgem -o bgem
+	web_error "$URL/.core/gems/internals.gem"
+	curl -s $URL/.core/gems/internals.gem -o internals.gem
+	mv internals.gem .core/gems/
+	web_error "$URL/.core/icons/icon1"
+	curl -s $URL/.core/icons/icon1 -o icon1
+	web_error "$URL/.core/icons/icon2"
+	curl -s $URL/.core/icons/icon2 -o icon2
+	web_error "$URL/.core/icons/icon3"
+	curl -s $URL/.core/icons/icon3 -o icon3
+	web_error "$URL/.core/icons/icon4"
+	curl -s $URL/.core/icons/icon4 -o icon4
+	web_error "$URL/.core/icons/icon5"
+	curl -s $URL/.core/icons/icon5 -o icon5
+
+	for i in `seq 1 5`; do
+		mv "icon$i" .core/icons/
+	done
+
+	touch .history
+	web_error "$URL/README"
+	curl -s $URL/README -o README
+	popd > /dev/null
+	
+	echo -e "\b\b\b [\e[1;32mdone\e[0;37m]\e[0m"
+
+	exec_path="/usr/local/bin"
+	if [ ! -f "$exec_path/genesis" ]; then
+		pinfo "Creating exec script: genesis"
+		echo '#!/bin/bash' > $exec_path/genesis
+		echo >> $exec_path/genesis
+		echo 'pushd $HOME/genesis6 > /dev/null' >> $exec_path/genesis
+		echo 'if [ ! -f .history ]; then' >> $exec_path/genesis
+		echo -e "\ttouch .history" >> $exec_path/genesis
+		echo 'fi' >> $exec_path/genesis
+		echo 'ruby genesis "$@"' >> $exec_path/genesis
+		echo 'popd > /dev/null' >> $exec_path/genesis
+
+		sudo chmod +x $exec_path/genesis
+	fi
+	
+	if [ ! -f "$HOME/gpm" ]; then
+		pinfo "Getting manager script: gpm"
+		web_error "$URL/gpm"
+		curl -s $URL/gpm -o gpm
+		if [[ $(pwd) != $HOME ]]; then
+			if [ -f $HOME/gpm ]; then
+				rm $HOME/gpm
+			fi
+			mv gpm $HOME/
+		fi
+	fi
+
+	echo '_gpmcomplete() {' > $HOME/gpm_complete
+	echo 'COMPREPLY=()' >> $HOME/gpm_complete
+	echo '' >> $HOME/gpm_complete
+	echo 'local margs=("help" "install" "uninstall" "add" "remove" "update" "list")' >> $HOME/gpm_complete
+	echo '' >> $HOME/gpm_complete
+	echo 'declare -A OPTIONS' >> $HOME/gpm_complete
+	echo 'OPTIONS[install]="core all"' >> $HOME/gpm_complete
+	echo 'OPTIONS[add]="all"' >> $HOME/gpm_complete
+	echo 'OPTIONS[remove]="all"' >> $HOME/gpm_complete
+	echo 'OPTIONS[list]="all available installed"' >> $HOME/gpm_complete
+	echo '' >> $HOME/gpm_complete
+	echo 'local cur=${COMP_WORDS[COMP_CWORD]}' >> $HOME/gpm_complete
+	echo '' >> $HOME/gpm_complete
+	echo 'if [ ${OPTIONS[$3]+1} ]; then' >> $HOME/gpm_complete
+	echo 'COMPREPLY=( `compgen -W "${OPTIONS[$3]}" -- $cur` )' >> $HOME/gpm_complete
+	echo 'elif [[ "${OPTIONS[*]}" == *"$3"* ]]; then' >> $HOME/gpm_complete
+	echo 'if [[ "$3" != "all" ]] && [[ "$3" != "core" ]] && [[ "$3" != "available" ]] && [[ "$3" != "installed" ]]; then' >> $HOME/gpm_complete
+	echo 'COMPREPLY=( `compgen -W "${OPTIONS[*]}" -- $cur` )' >> $HOME/gpm_complete
+	echo 'else' >> $HOME/gpm_complete
+	echo 'COMPREPLY=()' >> $HOME/gpm_complete
+	echo 'fi' >> $HOME/gpm_complete
+	echo 'else' >> $HOME/gpm_complete
+	echo 'if [[ "$3" != "help" ]] && [[ "$3" != "update" ]] && [[ "$3" != "uninstall" ]]; then' >> $HOME/gpm_complete
+	echo 'COMPREPLY=( `compgen -W "${margs[*]}" -- $cur` )' >> $HOME/gpm_complete
+	echo 'else' >> $HOME/gpm_complete
+	echo 'COMPREPLY=()' >> $HOME/gpm_complete
+	echo 'fi' >> $HOME/gpm_complete
+	echo 'fi' >> $HOME/gpm_complete
+	echo '}' >> $HOME/gpm_complete
+	echo 'complete -F _gpmcomplete gpm' >> $HOME/gpm_complete
+		
+	if [ -f $HOME/.bash_aliases ]; then
+		if ! grep -Fxq '^alias gpm=' $HOME/.bash_aliases; then
+			echo 'alias gpm="bash \"$HOME/gpm\""' >> $HOME/.bash_aliases
+		fi
+
+		if ! grep -Fxq '^source $HOME/gpm_complete' $HOME/.bash_aliases; then
+			echo 'source $HOME/gpm_complete' >> $HOME/.bash_aliases
+		fi
+	else
+		pinfo "Adding gpm to new .bash_aliases file"
+		echo 'alias gpm="bash \"$HOME/gpm\""' > $HOME/.bash_aliases
+		echo 'source $HOME/gpm_complete' >> $HOME/.bash_aliases
+	fi
+	cat $HOME/.bash_aliases | sort -u > $HOME/.temp
+	mv $HOME/.temp $HOME/.bash_aliases
+}
+
+function update
+{
+	echo -en "\e[0;37mUpdating core..."
+
+	pushd $HOME/genesis6 > /dev/null
+	web_error "$URL/genesis"
+	curl -s $URL/genesis -o genesis
+	web_error "$URL/gpm"
+	curl -s $URL/gpm -o gpm
+	web_error "$URL/gecko.png"
+	curl -s $URL/gecko.png -o gecko.png
+	web_error "$URL/mkmod"
+	curl -s $URL/mkmod -o mkmod
+	web_error "$URL/bgem"
+	curl -s $URL/bgem -o bgem
+	web_error "$URL/.core/gems/internals.gem"
+	curl -s $URL/.core/gems/internals.gem -o internals.gem
+	mv internals.gem .core/gems/
+	web_error "$URL/.core/icons/icon1"
+	curl -s $URL/.core/icons/icon1 -o icon1
+	web_error "$URL/.core/icons/icon2"
+	curl -s $URL/.core/icons/icon2 -o icon2
+	web_error "$URL/.core/icons/icon3"
+	curl -s $URL/.core/icons/icon3 -o icon3
+	web_error "$URL/.core/icons/icon4"
+	curl -s $URL/.core/icons/icon4 -o icon4
+	web_error "$URL/.core/icons/icon5"
+	curl -s $URL/.core/icons/icon5 -o icon5
+
+	for i in `seq 1 5`; do
+		mv "icon$i" .core/icons/
+	done
+
+	web_error "$URL/README"
+	curl -s $URL/README -o README
+	popd > /dev/null
+	echo -e "\b\b\b [\e[1;32mdone\e[0;37m]\e[0m"
+
+	pinstall "Updating modules"
+	
+	echo -n "" > .mods
+	while read -r mods; do
+		echo "$mods" >> .mods
+	done< <(ls $HOME/genesis6/modules/)
+
+	web_error "$URL/master.list"
+	curl -s $URL/master.list -o master.list
+		while read -r line; do
+			if [[ "$line" == "BEGIN_"* ]]; then
+				break
+			elif [[ "$line" == "gem:"* ]]; then
+				_gem=`echo "$line" | awk -F':' '{ print $NF }'`
+				gem_install "$_gem"
+			elif [[ "$line" == "deb:"* ]]; then
+				_deb=`echo "$line" | awk -F':' '{ print $NF }'`
+				pkg_install "$_deb"
+			else
+				while read -r mod; do
+					if [[ "$line.gem" == "$mod" ]]; then
+						pushd $HOME/genesis6 > /dev/null
+						web_error "$URL/master.list"
+						curl -s "$URL/modules/$line.gem" -o "$line.gem"
+						mv "$line.gem" modules/
+						popd > /dev/null
+						while read -r files; do
+							directory=`echo "${files%/*}"`
+							file=`echo "${files##*/}"`
+							pushd $HOME/genesis6 > /dev/null
+							mkdir -p $directory
+							web_error "$URL/$files"
+							curl -s $URL/$files -o $file
+							mv "$file" "$directory"
+							popd > /dev/null
+						done< <(awk "/BEGIN_$line/{flag=1;next}/END_$line/{flag=0}flag" master.list)
+					fi
+				done< <(cat .mods)
+			fi
+		done< <(cat master.list | sed '/^\s*$/d')
+	pinfo "Modules updated"
+	rm master.list
+	rm .mods
+}
+
+############################################################################
+
+# Arg parse and exec
+
+trap cleanup EXIT
+
+argc=$#
+	
+# help
+if [ -z $1 ] || [[ "$1" == "help" ]]; then
+	echo "usage: "
+	echo "gpm install [core | all]"
+	echo "gpm add [<module> | all ]"
+	echo "gpm remove [<module> | all]"
+	echo "gpm update"
+	echo "gpm uninstall"
+	echo "gpm list [all | installed | available]"
+	echo "gpm help"
+	exit 1
+fi
+
+# install
+if [[ "$1" == "install" ]]; then
+
+	if [ $argc -gt 2 ]; then
+		perr "Too many arguments"
+		exit 1
+	fi
+
+	if [[ "$2" == "core" ]] || [ -z $2 ]; then
+		install_core
+	elif [[ "$2" == "all" ]]; then
+		install_core
+		install_all
+	else
+		perr "Unknown option $2"
+		exit 1
+	fi
+# add module
+elif [[ "$1" == "add" ]]; then
+	if [ $argc -eq 1 ]; then
+			perr "Not enough arguments"
+			exit 1
+	elif [[ "$2" == "all" ]]; then
+		if [ ! -d $HOME/genesis6 ]; then
+			install_core
+		fi
+		install_all
+	elif [[ "$2" != "all" ]]; then
+		if [ ! -d $HOME/genesis6 ]; then
+			install_core
+		fi
+		install_module "$2"
+	elif [ $argc -gt 2 ]; then
+		perr "Too many arguments"
+		exit 1
+	fi
+# module removal options
+elif [[ "$1" == "remove" ]]; then
+	if [ $argc -eq 1 ]; then
+		perr "Not enough arguments"
+		exit 1
+	elif [ $argc -eq 2 ]; then
+		if [[ "$2" == "all" ]]; then
+			remove_all
+		else
+			remove_module "$2"
+		fi
+	else
+		perr "Too many arguments"
+	fi
+elif [[ "$1" == "list" ]]; then
+	if [ $argc -eq 1 ]; then
+		perr "Not enough arguments"
+		exit 1
+	elif [ $argc -eq 2 ]; then
+		if [[ "$2" == "all" ]]; then
+			list_all_modules
+		elif [[ "$2" == "installed" ]]; then
+			list_installed_modules
+		elif [[ "$2" == "available" ]]; then
+			list_available_modules
+		else
+			perr "Unknown list option: $2"
+			exit 1
+		fi
+	else
+		perr "Too many arguments"
+		exit 1
+	fi
+elif [[ "$1" == "update" ]]; then
+	if [ $argc -gt 1 ]; then
+		perr "Too many arguments"
+		exit 1
+	else
+		update
+	fi
+# uninstall genesis
+elif [[ "$1" == "uninstall" ]]; then
+	if [ -d $HOME/genesis6 ]; then
+		pinfo "Removing genesis"
+		rm -rf $HOME/genesis6
+		pinfo "Genesis uninstalled successfully"
+	else
+		perr "Genesis not installed or already removed"
+	fi
+
+	if [ -f /usr/local/bin/genesis ]; then
+		pinfo "Removing genesis exec script"
+		rm /usr/local/bin/genesis
+	fi
+	# if gpm not removed, remove it
+	if [ -f $HOME/gpm ]; then
+		read -r -p "Do you want to remove gpm as well? [Y/n]: " -n 1
+		echo
+		if [[ $REPLY =~ ^[Yy]$ ]]; then
+			pinfo "Removing gpm"
+			if [ -f $HOME/gpm ]; then
+				rm $HOME/gpm
+			fi
+			
+			# remove completion script
+			if [ -f $HOME/gpm_complete ]; then
+				rm $HOME/gpm_complete
+			fi
+			
+			# update .bash_aliases
+			if [ -f $HOME/.bash_aliases ]; then
+				grep -v 'gpm' $HOME/.bash_aliases > $HOME/.temp
+				mv $HOME/.temp $HOME/.bash_aliases
+			fi
+			# remove completion
+			complete -r gpm
+		fi
+	fi
+# unknown command
+elif [[ "$1" != "help" ]]; then
+	perr "Unknown command $1"
+	exit 1
+fi

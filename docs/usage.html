@@ -1,0 +1,110 @@
+
+<html>
+
+<head>
+  <title>Genesis - Usage</title>
+  <link rel="icon" href="imgs/gecko.png" />
+  <link rel="stylesheet" type="text/css" href="css/sunburst.css" />
+  <link rel="stylesheet" type="text/css" href="css/style.css" />
+  <script src="https://cdn.rawgit.com/google/code-prettify/master/loader/run_prettify.js"></script>
+</head>
+
+<body>
+  <div id="main" class="scrollable">
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="topnav" id="myTopnav">
+          <a href="index.html">Home</a>
+          <a href="#" class="active">Usage</a>
+          <a href="tutorials.html">Tutorials</a>
+          <a href="indev.html">In Development</a>
+          <a href="https://github.com/sleepless-p03t/Genesis-Revival" onclick="return checkOS();" target="_blank">GitHub</a>
+          <a href="javascript:void(0);" class="icon" onclick="myFunction()">&#9776;</a>
+        </div>
+        <div class="centered">
+          <div class="contents">
+            <h1 class="main-title">Usage</h1>
+            <p>
+              Downloading and installing Genesis is easy. You'll need:
+            </p>
+            <ul class="info">
+              <li>Working internet connection</li>
+              <li>Kali Linux</li>
+<!--
+              <li>GPM - download <a download href="gpm" style="color: #2cdfe4;">here</a></li>
+            </ul>
+            <p>
+              After downloading GPM (assume located in Downloads) <br /> To install the core:
+            </p>
+            <pre class="prettyprint">
+cd ~/Downloads
+chmod +x gpm
+./gpm install
+# or
+./gpm install core</pre>
+            <p>
+              To install the core and all available modules:
+            </p>
+            <pre class="prettyprint">
+cd ~/Downloads
+./gpm install all</pre>
+            <p>
+              The installer downloads everything necessary for genesis, and adds gpm to the home directory. An alias is also created for gpm.
+            </p>
+
+            <h1>GPM (<p style="color: 2cdfe4; display: inline;">G</p>enesis <p style="color: 2cdfe4; display: inline;">P</p>roject <p style="color: 2cdfe4; display: inline;">M</p>anager)</h1>
+            <p>
+              GPM is the alternative to using git to update your genesis install<br />GPM can:
+            </p>
+            <ul class="info">
+              <li>Install Genesis</li>
+              <li>Update Genesis</li>
+              <li>Uninstall Genesis</li>
+              <li>List all modules</li>
+              <li>List installed modules</li>
+              <li>List available modules</li>
+              <li>Add modules</li>
+              <li>Remove modules</li>
+            </ul>
+            <pre class="prettyprint">
+# gpm is aliased if installed
+# run the following for help
+gpm help</pre>
+-->
+            <h1>Using Genesis</h1>
+            <p>Starting Genesis</p>
+            <pre class="prettyprint">
+# default, animated icon display
+genesis
+# static icon display (no animation)
+genesis -s
+# no icon display
+genesis -q</pre>
+            <p>Genesis is a CLI that has limited functionality by itself<br />The key to Genesis's functionality resides in modules<br />Using a module:</p>
+            <pre class="prettyprint">
+genesis > load module</pre>
+            <p>Pressing &lt;TAB&gt; &lt;TAB&gt; will show available commands, variables, and/or available completions</p>
+            <p>Available modules:</p>
+             <ul class="info">
+               <!--
+							<li>casm by Sleepless Poet</li>
+							<li>java by Sleepless</li>
+							<li>shellcode by sleepless</li>
+            -->
+							<li>test6</li>
+<!--            </ul>
+<p>Install them using gpm:</p>
+<pre class="prettyprint">
+# for example
+gpm add test</pre>
+            <p>For more information on how to make a new module, check out the <a style="color: #2cdfe4;" href="tutorials.html">Tutorials</a> page</p>
+          -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="js/script.js"></script>
+</body>
+
+</html>

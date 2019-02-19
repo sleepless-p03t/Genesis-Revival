@@ -1,0 +1,201 @@
+<html>
+
+<head>
+  <title>Genesis - Tutorials</title>
+  <link rel="icon" href="imgs/gecko.png" />
+  <link rel="stylesheet" type="text/css" href="css/sunburst.css" />
+  <link rel="stylesheet" type="text/css" href="css/style.css" />
+  <script src="https://cdn.rawgit.com/google/code-prettify/master/loader/run_prettify.js"></script>
+</head>
+
+<body>
+  <div id="main" class="scrollable">
+    <div class="content-wrapper">
+      <div class="content">
+        <div class="topnav" id="myTopnav">
+          <a href="index.html">Home</a>
+          <a href="usage.html">Usage</a>
+          <a href="#" class="active">Tutorials</a>
+          <a href="indev.html">In Development</a>
+          <a href="https://github.com/sleepless-p03t/Genesis-Revival" target="_blank">GitHub</a>
+          <a href="javascript:void(0);" class="icon" onclick="myFunction()">&#9776;</a>
+        </div>
+        <div class="centered">
+          <div class="contents">
+            <h1 class="main-title">Tutorials</h1>
+            <p>Let's make a new module</p>
+            <p>Genesis is installed to the home directory</p>
+            <pre class="prettyprint">
+cd ~/Genesis-Revival/
+# we'll make a module called 'example'
+bash mkmod example
+# Info and instructions displayed here
+# Directories and files are generated
+cd example/src
+vim example.rb</pre>
+            <p>Now let's edit the module's main script</p>
+            <pre class="prettyprint linenums">
+# module name
+def mname
+  "example"
+end
+
+# module commands, generate pre-defined
+def cmds
+  [ "example" ]
+end
+
+# custom variables to be set, used by the tab completer
+# retrievable via RuntimeStore.get_val_of function
+
+# 1 means the variable is required to be set, 0 means it is optional
+def vars
+  { "example" => 1, "file" => 0, "whatever" => 0 }
+end
+
+# use plugin(s)
+def use
+  [ ]
+end
+
+def example
+  # "example" has a value
+  if !RuntimeStore.get_val_of("example") != nil
+    Output.info_msg("example has a value of ", RuntimeStore.get_val_of("example"))
+  else
+    # outputs an error message
+    Output.err_msg("example is not set", "")
+  end
+end
+
+# Anything that isn't a class, module, or function is ignored</pre>
+            <p>Once everything is edited, run the bgem script passing the module name as the only argument</p>
+            <pre class="prettyprint">
+cd ~/Genesis-Revival/
+bash mkmod install example
+# this will verify any dependencies listed in the example/example.info file
+# and if all dependencies are met, it will pack the module into a gmd file</pre>
+<!--
+            <h2><u style="color: #2cdfe4;">Internal Capabilities</u></h2>
+            <h3>MSFVenom</h3>
+            <p>The MSFVenom internal only adds its various required variables to your module's variable list</p>
+            <pre class="prettyprint linenums">
+# snippet
+
+def use
+  [ "msfvenom" ]
+end
+
+def generate(vhash)
+
+  # msfvenom variables:
+  arch = vhash["arch"] # target architecture
+  payload = vhash["payload"] # payload to generate
+  bad = vhash["bad"] # bad opcodes to remove
+  iter = vhash["iter"] # how many times to iterate the encoder
+  pvals = vhash["pvals"] # payload variables
+  encoder = vhash["encoder"] # the encoder to use
+
+  # running msfvenom:
+  # the exec can be built using string operations too
+  system("msfvenom -a #{arch} --platform windows -p #{payload} #{pvals} -b #{bad} -i #{iter} -e #{encoder}")
+end
+
+# end snippet</pre>
+            <h3>Admin</h3>
+            <p>Want to add admin elevation to your malware?</p>
+            <p>How to use the admin built-in:</p>
+            <pre class="prettyprint linenums">
+# snippet
+
+def use
+  [ "admin" ]
+end
+
+def generate(vhash)
+
+  # admin only has one variable: alang
+  lang = vhash["alang"]
+
+  if lang == "bat" || lang == "batch"
+    # execute the code generator:
+    batch
+    # Creates file bat.adm at: ~/.genesis/modifiers/batch/
+  elsif lang == "ps1" || lang == "powershell"
+    # execute the code generator:
+    powershell
+    # creates file psh.adm at: ~/.genesis/modifiers/powershell/
+  end
+
+  # if you want to use the file later on:
+  # To get the batch file location:
+  batch_admin = batch_stub
+
+  # To get the powershell file location:
+  ps1_admin = powershell_stub
+
+  # To use the file in a system command:
+  system("cat #{batch_admin}")
+  # or
+  system("cat #{ps1_admin}")
+
+  # To use the file in Ruby:
+  batch_file = batch_admin.gsub('~', "#{Dir.home}")
+  puts File.read(batch_file)
+  # or
+  ps1_file = ps1_admin.gsub('~', "#{Dir.home}")
+  puts File.read(ps1_file)
+end
+
+# end snippet</pre>
+            <h3>Shortcut</h3>
+            <p>If you want your malware to create a shortcut:</p>
+            <pre class="prettyprint linenums">
+# snippet
+def use
+  [ "shortcut" ]
+end
+
+def generate(vhash)
+  # getting the variables:
+
+  exec = vhash["exec"] # the executable the shortcut runs
+  args = vhash["args"] # the arguments to pass to the executable
+  desc = vhash["description"] # shortcut description
+  icon = vhash["iconloc"] # where to pull the icon from
+  sname = vhash["sname"] # the name of the shortcut file
+
+  # create the shortcut generator
+  shortcut(exec, args, desc, icon, sname)
+
+  # to access the generator file:
+
+  loc = "#{shortcut_loc}/#{sname}" # use str.gsub() for ruby
+end
+
+# end snippet</pre>
+            <p>Not all variables need to be set, just handle situations accordingly <br /></p>
+-->
+            <h2 style="color: #2cdfe4;">Tips and Tricks</h2>
+            <p>If you want to have access to Genesis' runtime directory in your module use:</p>
+            <pre class="prettyprint">
+rundir = "#{Dir.pwd}/.runtime"</pre>
+            <p>If you want to use your Home directory in Ruby:</p>
+            <pre class="prettyprint">
+myhome = "#{Dir.home}/"</pre>
+            <p>I'll try to keep tutorials updated as I add new things<br /></p>
+            <p>If you want your module added to the official project, do the following:</p>
+            <ul class="info">
+              <li>Email the module to <a style="color: #2cdfe4;" href="mailto:sleepless.genesis6@gmail.com?Subject=New%20module" target="_top">sleepless</a></li>
+              <li>Briefly explain the module's purpose</li>
+              <p style="display: inline"><br /><b style="color: #2cdfe4;">Note:</b> Modules will be tested, reviewed, and approved prior to release.</p>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="js/script.js"></script>
+</body>
+
+</html>
