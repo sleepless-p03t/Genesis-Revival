@@ -1,0 +1,30 @@
+#!/bin/bash
+
+RPATH="https://raw.githubusercontent.com/sleepless-p03t/Genesis-Revival/master"
+
+function web_error
+{
+	local _url="$1"
+
+	if ! curl -s -o /dev/null --fail -r 0-0 "$_url"; then
+		echo
+		echo -e "\e[1;31mGPM could not reach remote target or remote file not found. Aborting\e[0m"
+		exit 2
+	fi
+}
+
+#####------- GPM START -------#####
+
+data_list="$RPATH/master.list"
+root=`pwd`
+tmp=`mktemp -d`
+cd $tmp
+
+web_error "$data_list"
+curl -s "$data_list" -o master.list
+
+while read -r line; do
+	echo "$line"
+done< <(awk '/INTERNALS_START/{flag=1;next}/INTERNALS_END/{flag=0}flag' master.list)
+
+cd $root

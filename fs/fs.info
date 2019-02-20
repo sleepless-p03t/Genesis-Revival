@@ -1,0 +1,5 @@
+Developer: sleepless-p03t
+Plugin Name: FS
+Plugin Info: File system control, great for accessing files across modules
+Package Dependencies:
+Gem Dependencies:
