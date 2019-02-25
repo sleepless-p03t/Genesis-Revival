@@ -1,0 +1,69 @@
+#!/bin/bash
+
+_gpmcomplete() {
+	local cur prev rprev count
+	
+	local margs=("help" "install" "uninstall" "add" "remove" "update" "list")
+
+	COMPREPLY=()
+	
+	cur=${COMP_WORDS[COMP_CWORD]}
+	prev=${COMP_WORDS[COMP_CWORD-1]}
+	rprev=${COMP_WORDS[COMP_CWORD-2]}
+
+	if [ $COMP_CWORD -eq 1 ]; then
+		COMPREPLY=( $(compgen -W "${margs[*]}" -- $cur) )
+	elif [ $COMP_CWORD -eq 2 ]; then
+		case "$prev" in
+			"list")
+				COMPREPLY=( $(compgen -W "all plugins modules" -- $cur) )
+				;;
+			"add")
+				;&
+			"remove")
+				COMPREPLY=( $(compgen -W "plugin module" -- $cur) )
+				;;
+			"install")
+				;&
+			"uninstall")
+				;&
+			"help")
+				;;
+			*)
+				;;
+		esac
+
+	elif [ $COMP_CWORD -eq 3 ]; then
+		case "$rprev" in
+			"add")
+				if [[ "$prev" == "module" ]]; then
+					count=`ls -1 ~/.gpm/modules/*.gmd 2> /dev/null | wc -l`
+					if [ $count -ne 0 ]; then
+						COMPREPLY=( $(compgen -W "$(ls ~/.gpm/modules/ | awk -F'[/.]' '{ print $(NF-1) }')") )
+					fi
+				elif [[ "$prev" == "plugin" ]]; then
+					count=`ls -1 ~/.gpm/plugins/*.gmd 2> /dev/null | wc -l`
+					if [ $count -ne 0 ]; then
+						COMPREPLY=( $(compgen -W "$(ls ~/.gpm/plugins/ | awk -F'[/.]' '{ print $(NF-1) }')") )
+					fi
+				fi
+				;;
+			"remove")
+				if [[ "$prev" == "module" ]]; then
+					count=`ls -1 $GENESIS_HOME/modules/*.gmd 2> /dev/null | wc -l`
+					if [ $count -ne 0 ]; then
+						COMPREPLY=( $(compgen -W "$(ls $GENESIS_HOME/modules/* | awk -F'[/.]' '{ print $(NF-1) }')") )
+					fi
+				elif [[ "$prev" == "plugin" ]]; then
+					count=`ls -1 $GENESIS_HOME/plugins/*.gmd 2> /dev/null | wc -l`
+					if [ $count -ne 0 ]; then
+						COMPREPLY=( $(compgen -W "$(ls $GENESIS_HOME/plugins/* | awk -F'[/.]' '{ print $(NF-1) }')") )
+					fi
+				fi
+				;;
+			*)
+				;;
+		esac
+	fi
+}
+complete -F _gpmcomplete gpm2

@@ -8,3 +8,11 @@ PLUGIN_END
 MODULE_START
 test6.gmd
 MODULE_END
+
+ICON_START
+icon1
+icon2
+icon3
+icon4
+icon5
+ICON_END

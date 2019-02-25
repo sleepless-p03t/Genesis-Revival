@@ -1,0 +1,82 @@
+#!/bin/bash
+
+root=`pwd`
+
+function cleanup
+{
+	local count
+	if [ -d ~/.gpm/ ]; then
+		count=`ls -1 ~/.gpm/internals/*.gmd 2> /dev/null | wc -l`
+		if [ $count -ne 0 ]; then rm ~/.gpm/internals/*.gmd; fi
+		count=`ls -1 ~/.gpm/plugins/*.gmd 2> /dev/null | wc -l`
+		if [ $count -ne 0 ]; then rm ~/.gpm/plugins/*.gmd; fi
+		count=`ls -1 ~/.gpm/modules/*.gmd 2> /dev/null | wc -l`
+		if [ $count -ne 0 ]; then rm ~/.gpm/modules/*.gmd; fi
+	fi
+
+	cd $root
+}
+
+### Environment setup ###
+function install
+{
+	cd
+
+	if ! grep -q '^export GENESIS_HOME=' ~/.bashrc; then
+		echo "Environmental variable GENESIS_HOME not found."
+		echo "Attempting to locate Genesis in $HOME"
+		if ! find ~/ -type f -name genesis | grep -q -i 'revival'; then
+			echo "Genesis does not appear to be cloned."
+			echo -en "\e[1;31mWould you like to clone genesis now? [Y/n]: \e[0m"
+			read -r ANS
+			if [[ $ANS =~ ^[Yy] ]]; then
+				if ! git ls-remote https://github.com/sleepless-p03t/Genesis-Revival.git -q &> /dev/null; then
+					echo "Genesis-Revival repository could not be found. Aborting"
+					exit 1
+				else
+					cd
+					echo -n "Cloning Genesis-Revival into $HOME/ ..."
+					git clone https://github.com/sleepless-p03t/Genesis-Revival.git -q
+					echo -e "\b\b\b\e[1;32mDone\e[0m"
+					echo -e "Adding environment variable definition \e[1;34mGENESIS_HOME\e[0m to ~/.bashrc"
+					echo "export GENESIS_HOME=\"$HOME/Genesis-Revival/\"" >> ~/.bashrc
+					source ~/.bashrc
+				fi
+			
+			else
+				echo "Aborting."
+				exit 1
+			fi
+		fi
+	fi
+
+	if [ ! -d ~/.gpm ]; then
+		echo "Creating and populating Genesis Project Manager directory .gpm in $HOME/"
+		mkdir -p ~/.gpm/internals
+		mkdir -p ~/.gpm/plugins
+		mkdir -p ~/.gpm/modules
+
+	fi
+	
+	if [ ! -f ~/.gpm/gpm_complete ]; then
+		cp $GENESIS_HOME/gpm_complete ~/.gpm/
+		source ~/.bashrc
+	fi
+
+	if [ ! -f /usr/local/bin/gpm ]; then
+		cp $root/$(basename $0) /usr/local/bin/
+		chmod +x /usr/local/bin/$(basename $0) 
+	fi
+
+	if [ -f ~/.bash_aliases ]; then
+		if ! grep -Fxq '^source $HOME/.gpm/gpm_complete' ~/.bash_aliases; then
+			echo 'source $HOME/.gpm/gpm_complete' >> ~/.bash_aliases
+		fi
+	else
+		echo 'source $HOME/.gpm/gpm_complete' >> ~/.bash_aliases
+	fi
+}
+
+trap cleanup SIGINT EXIT
+
+install

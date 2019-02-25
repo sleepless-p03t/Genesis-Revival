@@ -2,29 +2,341 @@
 
 RPATH="https://raw.githubusercontent.com/sleepless-p03t/Genesis-Revival/master"
 
+root=`pwd`
+
+
 function web_error
 {
 	local _url="$1"
+	local _file="$2"
 
 	if ! curl -s -o /dev/null --fail -r 0-0 "$_url"; then
 		echo
 		echo -e "\e[1;31mGPM could not reach remote target or remote file not found. Aborting\e[0m"
 		exit 2
+	else
+		curl -s "$_url" -o "$_file"
 	fi
 }
 
+function info_msg
+{
+	local msg="$1"
+	echo -e "\e[0;37m[\e[1;34mi\e[0;37m] \e[1;32m$msg\e[0m"
+}
+
+function init
+{
+	web_error "$RPATH/master.list" "master.list"
+	mkdir internals
+	mkdir plugins
+	mkdir modules
+}
+
+function list_internals
+{
+	while read -r line; do
+		if [ -f $GENESIS_HOME/.core/internals/$line ]; then
+			echo -e "\e[0;37m[\e[1;32m*\e[0;37m] \e[1;36m$line\e[0m"
+		else
+			echo -e "\e[0;37m[\e[1;31m-\e[0;37m] \e[1;36m$line\e[0m"
+		fi
+	done< <(awk '/INTERNALS_START/{flag=1;next}/INTERNALS_END/{flag=0}flag' $tmp/master.list)
+}
+
+function list_plugins
+{
+	while read -r line; do
+		if [ -f $GENESIS_HOME/.core/plugins/$line ]; then
+			echo -e "\e[0;37m[\e[1;32m*\e[0;37m] \e[1;36m$line\e[0m"
+		else
+			echo -e "\e[0;37m[\e[1;31m-\e[0;37m] \e[1;36m$line\e[0m"
+		fi
+	done< <(awk '/PLUGIN_START/{flag=1;next}/PLUGIN_END/{flag=0}flag' $tmp/master.list)
+}
+
+function list_modules
+{
+	while read -r line; do
+		if [ -f $GENESIS_HOME/modules/$line ]; then
+			echo -e "\e[0;37m[\e[1;32m*\e[0;37m] \e[1;36m$line\e[0m"
+		else
+			echo -e "\e[0;37m[\e[1;31m-\e[0;37m] \e[1;36m$line\e[0m"
+		fi
+	done< <(awk '/MODULE_START/{flag=1;next}/MODULE_END/{flag=0}flag' $tmp/master.list)
+}
+
+function download_internals
+{
+	cd $tmp/internals
+
+	while read -r line; do
+		info_msg "Retrieving internal: \e[1;37m$line"
+		web_error "$RPATH/.core/internals/$line" "$line"
+	done< <(awk '/INTERNALS_START/{flag=1;next}/INTERNALS_END/{flag=0}flag' $tmp/master.list)
+}
+
+function download_plugins
+{
+	cd $tmp/plugins
+	if [ ! -z $1 ]; then
+		if [ ! -f $GENESIS_HOME/.core/plugins/$1.gmd ]; then
+			if awk '/PLUGIN_START/{flag=1;next}/PLUGIN_END/{flag=0}flag' $tmp/master.list | grep -q "$1"; then
+				info_msg "Retrieving plugin: \e[1;37m$1\e[0m"
+				web_error "$RPATH/.core/plugins/$1.gmd" "$1.gmd"
+			else
+				echo -e "\e[0;31mPlugin $1 not found\e[0m"
+				exit 1
+			fi
+		else
+			echo -e "\e[1;33mPlugin \e[1;37m$1 \e[1;33malready installed\e[0m"
+			echo -en "\e[1;34mWould you like to replace it? [Y/n]: "
+			read -r ans
+			if [[ $ans =~ ^[Yy] ]]; then
+				info_msg "Retrieving plugin: \e[1;37m$1\e[0m"
+				web_error "$RPATH/.core/plugins/$1.gmd"
+			fi
+		fi
+	else
+		while read -r line; do
+			info_msg "Retrieving plugin: \e[1;37m$line\e[0m"
+			web_error "$RPATH/.core/plugins/$line" "$line"
+		done< <(awk '/PLUGIN_START/{flag=1;next}/PLUGIN_END/{flag=0}flag' $tmp/master.list)
+	fi
+}
+
+function download_modules
+{
+	cd $tmp/modules
+	if [ ! -z $1 ]; then
+		if [ ! -f $GENESIS_HOME/modules/$1.gmd ]; then
+			if awk '/MODULE_START/{flag=1;next}/MODULE_END/{flag=0}flag' $tmp/master.list | grep -q "$1"; then
+				info_msg "Retrieving module: \e[1;37m$1"
+				web_error "$RPATH/modules/$1.gmd"
+			else
+				echo -e "\e[0;31mModule $1 not found\e[0m"
+				exit 1
+			fi
+		else
+			echo -e "\e[1;33mModule \e[1;37m$1 \e[1;33malready installed\e[0m"
+			echo -en "\e[1;34mWould you like to replace it? [Y/n]: "
+			read -r ans
+			if [[ $ans =~ ^[Yy] ]]; then
+				info_msg "Retrieving module: \e[1;37m$1\e[0m"
+				web_error "$RPATH/modules/$1.gmd" "$1.gmd"
+			fi
+		fi
+	else
+		while read -r line; do
+			info_msg "Retrieving module: \e[1;37m$line"
+			web_error "$RPATH/modules/$line" "$line"
+		done< <(awk '/MODULE_START/{flag=1;next}/MODULE_END/{flag=0}flag' $tmp/master.list)
+	fi
+}
+
+function install_plugins
+{
+	cd $tmp/plugins
+	local count=`ls -1 *.gmd 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			cp $line $GENESIS_HOME/.core/plugins/
+			echo -en "\e[1;37mInclude source files? [Y/n]: \e[0m"
+			read -r ans
+			if [[ $ans =~ ^[Yy] ]]; then
+				tar -xjSf $line 
+				local directory=`awk -F'.' '{ print $1 }' <<< $line`
+				mv $directory $GENESIS_HOME/
+			fi
+		done< <(ls *.gmd)
+	fi
+}
+
+function install_modules
+{
+	cd $tmp/modules
+	local count=`ls -1 *.gmd 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			cp $line $GENESIS_HOME/modules/
+			echo -en "\e[1;37mInclude source files? [Y/n]: \e[0m"
+			read -r ans
+			if [[ $ans =~ ^[Yy] ]]; then
+				tar -xjSf $line
+				local directory=`awk -F'.' '{ print $1 }' <<< $line`
+				mv $directory $GENESIS_HOME/
+			fi
+		done< <(ls *.gmd)
+	fi
+}
+
+function install_internals
+{
+	cd $tmp/internals
+	local count=`ls -1 *.gmd 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			cp $line $GENESIS_HOME/.core/internals/
+			if [ ! -z $1 ]; then
+				echo -en "\e[1;37mInclude source files? [Y/n]: \e[0m"
+				read -r ans
+				if [[ $ans =~ ^[Yy] ]]; then
+					tar -xjSf $line
+					local directory=`awk -F'.' '{ print $1 }' <<< $line`
+					mv $directory $GENESIS_HOME/
+				fi
+			fi
+		done< <(ls *.gmd)
+	fi
+}
+
+function setup_bashrc_and_aliases
+{
+	# GENESIS_HOME global variable stores the genesis directory
+	cd
+	if ! find ~/ -type f -name genesis | grep -q 'revival'; then
+		success=0
+		echo -e "\e[1;33mGenesis Revival not found in $HOME/\e[0m"
+		echo -en "\e[1;37mDo you want to allow GPM to install Genesis Revival? [Y/n]: \e[0m"
+		read -r ans
+		if [[ $ans =~ ^[Yy] ]]; then
+			echo -en "\e[0;37m[\e[1;36m+\e[0;37m] \e[1;37mCreating directory structure in $HOME/ \e[0m"
+			mkdir -p $HOME/Genesis-Revival/.core/internals/
+			mkdir -p $HOME/Genesis-Revival/.core/icons/
+			mkdir -p $HOME/Genesis-Revival/.core/plugins/
+			mkdir -p $HOME/Genesis-Revival/modules
+			cp .bashrc{,.bkp}
+			echo "export GENESIS_HOME=\"$HOME/Genesis-Revival\"" >> ~/.bashrc
+			source ~/.bashrc
+
+			echo -e "\e[1;32mDone\e[0m"
+			echo
+			echo -e "\e[0;37m\e[1;36m+\e[0;37m \e[1;37mDownloading Genesis core\e[0m"
+			cd $GENESIS_HOME/
+			web_error "$RPATH/genesis"
+			cd $GENESIS_HOME/.core/icons/
+			while read -r line; do
+				web_error "$RPATH/.core/icons/$line" "$line"
+			done< <(awk '/ICON_START/{flag=1;next}/ICON_END/{flag=0}flag' $tmp/master.list)
+			download_internals 
+			install_internals
+			success=1
+		fi
+	fi
+
+
+	if ! grep -q 'export GENESIS_HOME=' ~/.bashrc; then
+		cd
+		cp .bashrc{,.bkp}
+		echo "created backup of local bashrc"
+	
+		echo "export GENESIS_HOME=\"$(dirname $(find ~/ -type f -name genesis | grep -i 'revival'))\"" >> ~/.bashrc
+		source ~/.bashrc
+	fi
+	
+	# this is a completion script for gpm
+	echo '_gpmcomplete() {' > $HOME/gpm_complete
+	echo 'COMPREPLY=()' >> $HOME/gpm_complete
+	echo '' >> $HOME/gpm_complete
+	echo 'local margs=("help" "install" "uninstall" "add" "remove" "update" "list")' >> $HOME/gpm_complete
+	echo '' >> $HOME/gpm_complete
+	echo 'declare -A OPTIONS' >> $HOME/gpm_complete
+	echo 'OPTIONS[add]="plugin module"' >> $HOME/gpm_complete
+	echo 'OPTIONS[remove]="plugin module"' >> $HOME/gpm_complete
+	echo 'OPTIONS[list]="plugins modules all"' >> $HOME/gpm_complete
+	echo '' >> $HOME/gpm_complete
+	echo 'local cur=${COMP_WORDS[COMP_CWORD]}' >> $HOME/gpm_complete
+	echo '' >> $HOME/gpm_complete
+	echo 'if [ ${OPTIONS[$3]+1} ]; then' >> $HOME/gpm_complete
+	echo 'COMPREPLY=( `compgen -W "${OPTIONS[$3]}" -- $cur` )' >> $HOME/gpm_complete
+	echo 'elif [[ "${OPTIONS[*]}" == *"$3"* ]]; then' >> $HOME/gpm_complete
+	echo 'if [[ "$3" != "all" ]] && [[ "$3" != "internals" ]] && [[ "$3" != "plugins" ]] && [[ "$3" != "plugin" ]] && [[ "$3" != "modules" ]] && [[ "$3" != "module" ]]; then' >> $HOME/gpm_complete
+	echo 'COMPREPLY=( `compgen -W "${OPTIONS[*]}" -- $cur` )' >> $HOME/gpm_complete
+	echo 'else' >> $HOME/gpm_complete
+	echo 'COMPREPLY=()' >> $HOME/gpm_complete
+	echo 'fi' >> $HOME/gpm_complete
+	echo 'else' >> $HOME/gpm_complete
+	echo 'if [[ "$3" != "help" ]] && [[ "$3" != "update" ]] && [[ "$3" != "uninstall" ]] && [[ "$3" != "install" ]]; then' >> $HOME/gpm_complete
+	echo 'COMPREPLY=( `compgen -W "${margs[*]}" -- $cur` )' >> $HOME/gpm_complete
+	echo 'else' >> $HOME/gpm_complete
+	echo 'COMPREPLY=()' >> $HOME/gpm_complete
+	echo 'fi' >> $HOME/gpm_complete
+	echo 'fi' >> $HOME/gpm_complete
+	echo '}' >> $HOME/gpm_complete
+	echo 'complete -F _gpmcomplete gpm' >> $HOME/gpm_complete
+
+	if [ -f $HOME/.bash_aliases ]; then
+		if ! grep -Fxq '^source $HOME/gpm_complete' $HOME/.bash_aliases; then
+			echo 'source $HOME/gpm_complete' >> $HOME/.bash_aliases
+		fi
+	else
+		echo 'alias gpm="bash \"$HOME/gpm\""' > $HOME/.bash_aliases
+		echo 'source $HOME/gpm_complete' >> $HOME/.bash_aliases
+	fi
+	cat $HOME/.bash_aliases | sort -u > $HOME/.temp
+	mv $HOME/.temp $HOME/.bash_aliases
+}
 #####------- GPM START -------#####
 
-data_list="$RPATH/master.list"
-root=`pwd`
+setup_bashrc_and_aliases
+
 tmp=`mktemp -d`
 cd $tmp
 
-web_error "$data_list"
-curl -s "$data_list" -o master.list
+init
 
-while read -r line; do
-	echo "$line"
-done< <(awk '/INTERNALS_START/{flag=1;next}/INTERNALS_END/{flag=0}flag' master.list)
+if [ ! -z $2 ]; then
+	if [[ "$1" == "help" ]] || [[ "$1" == "update" ]] || [[ "$1" == "uninstall" ]]; then
+		echo -e "\e[0;31mToo many arguments for $1\e[0m"
+		exit 1
+	fi
+
+	if [[ "$1" == "add" ]] || [[ "$1" == "remove" ]]; then
+		if [ -z $3 ]; then
+			echo -e "\e[0;31mMissing argument for $1\e[0m"
+			exit 1
+		fi
+	fi
+
+	if [[ "$1" == "list" ]]; then
+		list_opt="$2"
+		if [[ "$list_opt" == "plugins" ]]; then
+			list_plugins
+		elif [[ "$list_opt" == "modules" ]]; then
+			list_modules
+		elif [[ "$list_opt" == "all" ]]; then
+			echo -e "\e[1;37mPlugins:\e[0m"
+			list_plugins
+			echo -e "\n\e[1;37mModules:\e[0m"
+			list_modules
+		else
+			echo -e "\e[1;37mUnknown list option: $list_opt\e[0m"
+			exit 1
+		fi
+	elif [[ "$1" == "add" ]]; then
+		add_opt="$2"
+		if [[ "$add_opt" == "plugin" ]]; then
+			download_plugins "$3"
+		elif [[ "$add_opt" == "module" ]]; then
+			download_modules "$3"
+		fi
+	elif [[ "$1" == "remove" ]]; then
+		rem_opt="$2"
+		if [[ "$rem_opt" == "plugin" ]]; then
+			echo "removing plugin"
+		elif [[ "$rem_opt" == "module" ]]; then
+			echo "removing module"
+		fi
+	fi
+else
+	if [[ "$1" == "list" ]] || [[ "$1" == "remove" ]] || [[ "$1" == "add" ]] || [[ "$1" == "install" ]]; then
+		echo -e "\e[0;31mMissing argument for $1\e[0m"
+		exit 1
+	fi
+fi
 
 cd $root
+rm -rf $tmp
+exit
+cd $root
+rm -rf $tmp
