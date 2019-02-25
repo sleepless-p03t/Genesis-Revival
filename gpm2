@@ -1,6 +1,7 @@
 #!/bin/bash
 
 root=`pwd`
+RPATH="https://raw.githubusercontent.com/sleepless-p03t/Genesis-Revival/master"
 
 function cleanup
 {
@@ -17,6 +18,19 @@ function cleanup
 	cd $root
 }
 
+function download
+{
+	local _url="$1"
+	local _file="$2"
+
+	if ! curl -s -o /dev/null --fail -r 0-0 "$_url"; then
+		echo "Could not retrieve remote file"
+		exit 2
+	else
+		curl -s "$_url" -o "$_file"
+	fi
+}
+
 ### Environment setup ###
 function install
 {
@@ -26,23 +40,15 @@ function install
 		echo "Environmental variable GENESIS_HOME not found."
 		echo "Attempting to locate Genesis in $HOME"
 		if ! find ~/ -type f -name genesis | grep -q -i 'revival'; then
-			echo "Genesis does not appear to be cloned."
-			echo -en "\e[1;31mWould you like to clone genesis now? [Y/n]: \e[0m"
+			echo "Genesis does not appear to be downloaded."
+			echo -en "\e[1;31mWould you like to download genesis now? [Y/n]: \e[0m"
 			read -r ANS
 			if [[ $ANS =~ ^[Yy] ]]; then
-				if ! git ls-remote https://github.com/sleepless-p03t/Genesis-Revival.git -q &> /dev/null; then
-					echo "Genesis-Revival repository could not be found. Aborting"
-					exit 1
-				else
-					cd
-					echo -n "Cloning Genesis-Revival into $HOME/ ..."
-					git clone https://github.com/sleepless-p03t/Genesis-Revival.git -q
-					echo -e "\b\b\b\e[1;32mDone\e[0m"
-					echo -e "Adding environment variable definition \e[1;34mGENESIS_HOME\e[0m to ~/.bashrc"
-					echo "export GENESIS_HOME=\"$HOME/Genesis-Revival/\"" >> ~/.bashrc
-					source ~/.bashrc
-				fi
-			
+				download "$RPATH/Genesis-Revival.tar.bz2" "Genesis-Revival.tar.bz2"
+				tar -xjSf "Genesis-Arrival.tar.bz2"
+				echo -e "Adding environment variable definition \e[1;34mGENESIS_HOME\e[0m to ~/.bashrc"
+				echo "export GENESIS_HOME=\"$HOME/Genesis-Revival/\"" >> ~/.bashrc
+				source ~/.bashrc
 			else
 				echo "Aborting."
 				exit 1
