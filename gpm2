@@ -51,9 +51,20 @@ function _download
 	fi
 }
 
+
+# download all files
+# remove any files that aren't new or modified
 function init
 {
+	local count
+
 	cd ~/.gpm
+	
+	mkdir -p update/core
+	mkdir -p update/internals
+	mkdir -p update/plugins
+	mkdir -p update/modules
+
 	_download "$RPATH/master.list" "master.list"
 	cd internals
 
@@ -84,41 +95,59 @@ function init
 
 	cd ~/.gpm
 
-	return
-
-	while read -r line; do
-		file=`awk -F'/' '{ print $NF }' <<< $line`
-		if _cmp_files "$GENESIS_HOME/$file" "$line"; then
-			rm $line
-		fi
-	done< <(ls core/)
-
-	while read -r line; do
-		file=`awk -F'/' '{ print $NF }' <<< $line`
-		if [ -f $GENESIS_HOME/.core/internals/$file ]; then
-			if _cmp_files "$GENESIS_HOME/.core/internals/$file" "$line"; then
+	count=`ls -1 ~/.gpm/core/* 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			file=`awk -F'/' '{ print $NF }' <<< $line`
+			if _cmp_files "$GENESIS_HOME/$file" "$line"; then
 				rm $line
+			else
+				mv $line update/core/
 			fi
-		fi
-	done< <(ls internals/)
+		done< <(ls core/*)
+	fi
 
-	while read -r line; do
-		file=`awk -F'/' '{ print $NF }' <<< $line`
-		if [ -f $GENESIS_HOME/plugins/$file ]; then
-			if _cmp_files "$GENESIS_HOME/plugins/$file" "$line"; then
-				rm $line
+	count=`ls -1 ~/.gpm/internals/* 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			file=`awk -F'/' '{ print $NF }' <<< $line`
+			if [ -f $GENESIS_HOME/.core/internals/$file ]; then
+				if _cmp_files "$GENESIS_HOME/.core/internals/$file" "$line"; then
+					rm $line
+				else
+					mv $line update/internals/
+				fi
 			fi
-		fi
-	done< <(ls plugins)
-
-	while read -r line; do
-		file=`awk -F'/' '{ print $NF }' <<< $line`
-		if [ -f $GENESIS_HOME/modules/$file ]; then
-			if _cmp_files "$GENESIS_HOME/modules/$file" "$line"; then
-				rm $line
+		done< <(ls internals/*)
+	fi
+	
+	count=`ls -1 ~/.gpm/plugins/* 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			file=`awk -F'/' '{ print $NF }' <<< $line`
+			if [ -f $GENESIS_HOME/plugins/$file ]; then
+				if _cmp_files "$GENESIS_HOME/plugins/$file" "$line"; then
+					rm $line
+				else
+					mv $line update/plugins/
+				fi
 			fi
-		fi
-	done< <(ls modules)
+		done< <(ls plugins/*)
+	fi
+	
+	count=`ls -1 ~/.gpm/modules/* 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			file=`awk -F'/' '{ print $NF }' <<< $line`
+			if [ -f $GENESIS_HOME/modules/$file ]; then
+				if _cmp_files "$GENESIS_HOME/modules/$file" "$line"; then
+					rm $line
+				else
+					mv $line update/modules/
+				fi
+			fi
+		done< <(ls modules/*)
+	fi
 }
 
 ### Environment setup ###
@@ -139,7 +168,7 @@ function install
 				mv genesis_core Genesis-Revival
 				rm Genesis-Revival.tar.bz2
 				echo -e "Adding environment variable definition \e[1;34mGENESIS_HOME\e[0m to ~/.bashrc"
-				echo "export GENESIS_HOME=\"$HOME/Genesis-Revival/\"" >> ~/.bashrc
+				echo "export GENESIS_HOME=\"$HOME/Genesis-Revival\"" >> ~/.bashrc
 				source ~/.bashrc
 			else
 				echo "Aborting."
@@ -175,7 +204,7 @@ function install
 	fi
 }
 
-trap cleanup SIGINT EXIT
+#trap cleanup SIGINT EXIT
 
-install
+#install
 init

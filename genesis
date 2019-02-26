@@ -1,6 +1,7 @@
 #!/usr/bin/ruby
 
 # highlander will allow only one instance of genesis to run at a time
+# displays error message and exits otherwise
 begin
 	require 'highlander'
 rescue RuntimeError => e
