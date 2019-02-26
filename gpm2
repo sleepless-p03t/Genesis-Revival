@@ -6,6 +6,10 @@ RPATH="https://raw.githubusercontent.com/sleepless-p03t/Genesis-Revival/master"
 function cleanup
 {
 	local count
+	if [ -f ~/.gpm/master.list ]; then
+		rm ~/.gpm/master.list
+	fi
+
 	if [ -d ~/.gpm/ ]; then
 		count=`ls -1 ~/.gpm/internals/*.gmd 2> /dev/null | wc -l`
 		if [ $count -ne 0 ]; then rm ~/.gpm/internals/*.gmd; fi
@@ -13,12 +17,28 @@ function cleanup
 		if [ $count -ne 0 ]; then rm ~/.gpm/plugins/*.gmd; fi
 		count=`ls -1 ~/.gpm/modules/*.gmd 2> /dev/null | wc -l`
 		if [ $count -ne 0 ]; then rm ~/.gpm/modules/*.gmd; fi
+		count=`ls -1 ~/.gpm/core/* 2> /dev/null | wc -l`
+		if [ $count -ne 0 ]; then rm ~/.gpm/core/*; fi
 	fi
 
 	cd $root
 }
 
-function download
+function _cmp_files
+{
+	local old new
+
+	old=`md5sum $1 | awk '{ print $1 }'`
+	new=`md5sum $2 | awk '{ print $1 }'`
+
+	if [[ "$new" != "$old" ]]; then
+		return 1
+	else
+		return 0
+	fi
+}
+
+function _download
 {
 	local _url="$1"
 	local _file="$2"
@@ -31,6 +51,76 @@ function download
 	fi
 }
 
+function init
+{
+	cd ~/.gpm
+	_download "$RPATH/master.list" "master.list"
+	cd internals
+
+	# internals
+	while read -r line; do
+		_download "$RPATH/.core/internals/$line" "$line"
+	done< <(awk '/INTERNALS_START/{flag=1;next}/INTERNALS_END/{flag=0}flag' ~/.gpm/master.list)
+	
+	cd ~/.gpm/modules
+
+	# modules
+	while read -r line; do
+		_download "$RPATH/modules/$line" "$line"
+	done< <(awk '/MODULE_START/{flag=1;next}/MODULE_END/{flag=0}flag' ~/.gpm/master.list)
+
+	cd ~/.gpm/plugins
+	
+	# plugins
+	while read -r line; do
+		_download "$RPATH/plugins/$line" "$line"
+	done< <(awk '/PLUGIN_START/{flag=1;next}/PLUGIN_END/{flag=0}flag' ~/.gpm/master.list)
+
+	cd ~/.gpm/core
+
+	_download "$RPATH/genesis" "genesis"
+	_download "$RPATH/mkmod" "mkmod"
+	_download "$RPATH/mkplug" "mkplug"
+
+	cd ~/.gpm
+
+	return
+
+	while read -r line; do
+		file=`awk -F'/' '{ print $NF }' <<< $line`
+		if _cmp_files "$GENESIS_HOME/$file" "$line"; then
+			rm $line
+		fi
+	done< <(ls core/)
+
+	while read -r line; do
+		file=`awk -F'/' '{ print $NF }' <<< $line`
+		if [ -f $GENESIS_HOME/.core/internals/$file ]; then
+			if _cmp_files "$GENESIS_HOME/.core/internals/$file" "$line"; then
+				rm $line
+			fi
+		fi
+	done< <(ls internals/)
+
+	while read -r line; do
+		file=`awk -F'/' '{ print $NF }' <<< $line`
+		if [ -f $GENESIS_HOME/plugins/$file ]; then
+			if _cmp_files "$GENESIS_HOME/plugins/$file" "$line"; then
+				rm $line
+			fi
+		fi
+	done< <(ls plugins)
+
+	while read -r line; do
+		file=`awk -F'/' '{ print $NF }' <<< $line`
+		if [ -f $GENESIS_HOME/modules/$file ]; then
+			if _cmp_files "$GENESIS_HOME/modules/$file" "$line"; then
+				rm $line
+			fi
+		fi
+	done< <(ls modules)
+}
+
 ### Environment setup ###
 function install
 {
@@ -41,11 +131,13 @@ function install
 		echo "Attempting to locate Genesis in $HOME"
 		if ! find ~/ -type f -name genesis | grep -q -i 'revival'; then
 			echo "Genesis does not appear to be downloaded."
-			echo -en "\e[1;31mWould you like to download genesis now? [Y/n]: \e[0m"
+			echo -en "\e[1;32mWould you like to download genesis now? [Y/n]: \e[0m"
 			read -r ANS
 			if [[ $ANS =~ ^[Yy] ]]; then
-				download "$RPATH/Genesis-Revival.tar.bz2" "Genesis-Revival.tar.bz2"
-				tar -xjSf "Genesis-Arrival.tar.bz2"
+				_download "$RPATH/Genesis-Revival.tar.bz2" "Genesis-Revival.tar.bz2"
+				tar -xjSf Genesis-Revival.tar.bz2
+				mv genesis_core Genesis-Revival
+				rm Genesis-Revival.tar.bz2
 				echo -e "Adding environment variable definition \e[1;34mGENESIS_HOME\e[0m to ~/.bashrc"
 				echo "export GENESIS_HOME=\"$HOME/Genesis-Revival/\"" >> ~/.bashrc
 				source ~/.bashrc
@@ -61,7 +153,7 @@ function install
 		mkdir -p ~/.gpm/internals
 		mkdir -p ~/.gpm/plugins
 		mkdir -p ~/.gpm/modules
-
+		mkdir -p ~/.gpm/core
 	fi
 	
 	if [ ! -f ~/.gpm/gpm_complete ]; then
@@ -79,10 +171,11 @@ function install
 			echo 'source $HOME/.gpm/gpm_complete' >> ~/.bash_aliases
 		fi
 	else
-		echo 'source $HOME/.gpm/gpm_complete' >> ~/.bash_aliases
+		echo 'source $HOME/.gpm/gpm_complete' > ~/.bash_aliases
 	fi
 }
 
 trap cleanup SIGINT EXIT
 
 install
+init
