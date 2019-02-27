@@ -3,7 +3,7 @@
 _gpmcomplete() {
 	local cur prev rprev count
 	
-	local margs=("help" "install" "uninstall" "add" "remove" "update" "list")
+	local margs=("help" "install" "uninstall" "add" "remove" "update" "list" "list_local" "list_remote")
 
 	COMPREPLY=()
 	
@@ -16,6 +16,10 @@ _gpmcomplete() {
 	elif [ $COMP_CWORD -eq 2 ]; then
 		case "$prev" in
 			"list")
+				;&
+			"list_local")
+				;&
+			"list_remote")
 				COMPREPLY=( $(compgen -W "all plugins modules" -- $cur) )
 				;;
 			"add")

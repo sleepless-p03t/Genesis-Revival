@@ -54,7 +54,7 @@ function _download
 
 # download all files
 # remove any files that aren't new or modified
-function init
+function _init
 {
 	local count
 
@@ -151,7 +151,7 @@ function init
 }
 
 ### Environment setup ###
-function install
+function _install
 {
 	cd
 
@@ -204,7 +204,139 @@ function install
 	fi
 }
 
+function _list_internals
+{
+	cd ~/.gpm
+	while read -r line; do
+		file=`awk -F'.' '{ print $1 }' <<< $line`
+		if [ -f $GENESIS_HOME/.core/internals/$line ]; then
+			echo -e "\e[0;37m[\e[1;32m*\e[0;37m] \e[1;36m$file\e[0m"
+		else
+			echo -e "\e[0;37m[ ] \e[1;36m$file\e[0m"
+		fi
+	done< <(awk '/INTERNALS_START/{flag=1;next}/INTERNALS_END/{flag=0}flag' master.list)
+}
+
+function _list_plugins
+{
+	cd ~/.gpm
+	while read -r line; do
+		file=`awk -F'.' '{ print $1 }' <<< $line`
+		if [ -f $GENESIS_HOME/plugins/$line ]; then
+			echo -e "\e[0;37m[\e[1;32m*\e[0;37m] \e[1;36m$file\e[0m"
+		else
+			echo -e "\e[0;37m[ ] \e[1;36m$file\e[0m"
+		fi
+	done< <(awk '/PLUGIN_START/{flag=1;next}/PLUGIN_END/{flag=0}flag' master.list)
+}
+
+function _get_gem_deps
+{
+	local fp file success st
+	fp=`tar -tjSf $1 | grep '\.info'`
+	file=`awk -F'/' '{ print $NF }' <<< $fp`
+
+	tar -xjSf $1 --strip-components=1 $fp
+	
+	while read -r line; do
+		st=`gem list ^${line}$ -i`
+		if [[ "$st" != "true"* ]] && [[ "$st" != "" ]]; then
+			return 1
+		fi
+	done< <(grep 'Gem' $file | awk -F':' '{ print $NF }' | sed 's/ //g' | sed 's/,/\n/g')
+
+	rm $file
+
+	return 0
+}
+
+function _list_modules
+{
+	cd ~/.gpm
+	while read -r line; do
+		file=`awk -F'.' '{ print $1 }' <<< $line`
+		if [ -f $GENESIS_HOME/modules/$line ]; then
+			echo -e "\e[0;37m\e[1;32m*\e[0;37m] \e[1;36m$file\e[0m"
+		else
+			echo -e "\e[0;37m[ ] \e[1;36m$file\e[0m"
+		fi
+	done< <(awk '/MODULE_START/{flag=1;next}/MODULE_END/{flag=0}flag' master.list)
+}
+
+function _add_plugin
+{
+	cd ~/.gpm/plugins
+	
+	_get_pkg_deps "$1.gmd"
+	pd=$?
+	_get_gem_deps "$1.gmd"
+	gd=$?
+
+	echo -en "\e[0;37m[\e0m"
+	echo -en "\e[0;37m ] \e[1;37mInstalling plugin \e[1;36m$1\e[0;37m ...\r"
+	if [ ! -f $1.gmd ]; then
+		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[1;37mInstalling plugin \e[1;36m$1 \e[0;31mfailed\e[0m"
+	else
+		echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mInstalling plugin \e[1;36m$1 \e[0;32msuccess\e[0m"
+	fi
+
+	echo
+}
+
+function _remove_plugin
+{
+	cd $GENESIS_HOME/plugins
+	echo -en "\e[0;37m[\e0m"
+	echo -en "\e[0;37m ] \e[1;37mRemoving plugin \e[1;36m$1\e[1;37m ...\r"
+	if [ ! -f $1.gmd ]; then
+		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[1;37mRemoving plugin \e[1;36m$1 \e[0;31mfailed\e[0m"
+	else
+		echo -e "\e[0;37m[\e[1;33m-\e[0;37m] \e[1;37mRemoving plugin \e[1;36$1 \e[0;32msuccess\e[0m"
+	fi
+
+	echo
+}
+
+function _add_module
+{
+	cd ~/.gpm/modules
+	
+	_get_pkg_deps "$1.gmd"
+	pd=$?
+	_get_gem_deps "$1.gmd"
+	gd=$?
+	
+	echo -en "\e[0;37m[\e0m"
+	echo -en "\e[0;37m ] \e[1;37mInstalling module \e[1;36m$1\e[1;37m ...\r"
+	if [ ! -f $1.gmd ]; then
+		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[1;37mInstalling module \e[1;36m$1 \e[0;31mfailed\e[0m"
+	else
+		echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mInstalling module \e[1;36m$1 \e[0;32msuccess\e[0m"
+	fi
+
+	echo
+}
+
+function _remove_module
+{
+	cd $GENESIS_HOME/modules
+	echo -en "\e[0;37m[\e0m"
+	echo -en "\e[0;37m ] \e[1;37mRemoving module \e[1;36m$1\e[0;37m ...\r"
+	if [ ! -f $1.gmd ]; then
+		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[1;37mRemoving module \e[1;36m$1 \e[0;31mfailed\e[0m"
+	else
+		echo -e "\e[0;37m[\e[1;33m-\e[0;37m] \e[1;37mRemoving module \e[1;36m$1 \e[0;32msuccess\e[0m"
+	fi
+
+	echo
+}
+
 #trap cleanup SIGINT EXIT
 
 #install
-init
+#_init
+
+_remove_module "test6"
+_remove_module "test"
+
+_add_module "test6"
