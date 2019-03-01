@@ -156,10 +156,10 @@ function _install
 	cd
 
 	if ! grep -q '^export GENESIS_HOME=' ~/.bashrc; then
-		echo "Environmental variable GENESIS_HOME not found."
-		echo "Attempting to locate Genesis in $HOME"
+		echo -e "\e[0;37m[\e[1;34mi\e[0;37m] \e[1;37mEnvironmental variable GENESIS_HOME not found.\e[0m"
+		echo -e "\e[0;37m[\e[1;34mi\e[0;37m] \e[1;37mAttempting to locate Genesis in $HOME\e[0m"
 		if ! find ~/ -type f -name genesis | grep -q -i 'revival'; then
-			echo "Genesis does not appear to be downloaded."
+			echo -e "\e[0;37m[\e[1;34mi\e[0;37m] \e[1;37mGenesis does not appear to be downloaded.\e[0m"
 			echo -en "\e[1;32mWould you like to download genesis now? [Y/n]: \e[0m"
 			read -r ANS
 			if [[ $ANS =~ ^[Yy] ]]; then
@@ -178,7 +178,7 @@ function _install
 	fi
 
 	if [ ! -d ~/.gpm ]; then
-		echo "Creating and populating Genesis Project Manager directory .gpm in $HOME/"
+		echo -e "\e[0;37m[\e[1;34mi\e[0;37m] \e[1;37mCreating and populating Genesis Project Manager directory .gpm in $HOME/\e[0m"
 		mkdir -p ~/.gpm/internals
 		mkdir -p ~/.gpm/plugins
 		mkdir -p ~/.gpm/modules
@@ -230,54 +230,87 @@ function _list_plugins
 	done< <(awk '/PLUGIN_START/{flag=1;next}/PLUGIN_END/{flag=0}flag' master.list)
 }
 
-function _get_gem_deps
-{
-	local fp file success st
-	fp=`tar -tjSf $1 | grep '\.info'`
-	file=`awk -F'/' '{ print $NF }' <<< $fp`
-
-	tar -xjSf $1 --strip-components=1 $fp
-	
-	while read -r line; do
-		st=`gem list ^${line}$ -i`
-		if [[ "$st" != "true"* ]] && [[ "$st" != "" ]]; then
-			return 1
-		fi
-	done< <(grep 'Gem' $file | awk -F':' '{ print $NF }' | sed 's/ //g' | sed 's/,/\n/g')
-
-	rm $file
-
-	return 0
-}
-
 function _list_modules
 {
 	cd ~/.gpm
 	while read -r line; do
 		file=`awk -F'.' '{ print $1 }' <<< $line`
 		if [ -f $GENESIS_HOME/modules/$line ]; then
-			echo -e "\e[0;37m\e[1;32m*\e[0;37m] \e[1;36m$file\e[0m"
+			echo -e "\e[0;37m[\e[1;32m*\e[0;37m] \e[1;36m$file\e[0m"
 		else
 			echo -e "\e[0;37m[ ] \e[1;36m$file\e[0m"
 		fi
 	done< <(awk '/MODULE_START/{flag=1;next}/MODULE_END/{flag=0}flag' master.list)
 }
 
+success=1
+dmissing=()
+gmissing=()
+function _verify_deps 
+{
+	local st
+	success=1
+	dmissing=()
+	while read -r line; do
+		while read -r pkg; do
+			if [ ! -e $pkg ]; then
+				st=2
+				while [ $st -eq 2 ]; do
+					dpkg -s $pkg &> /dev/null
+					st=$?
+					if [ $st -eq 1 ]; then
+						success=0
+						dmissing+=( $pkg )
+					fi
+				done
+			fi
+		done< <(awk -F':' '{ $1=""; print }' <<< $line | sed 's/^[ \t]*//; s/ //g; s/,/\n/g')
+	done< <(tar -xjSf $1.gmd --strip-components=1 $(tar -tjSf $1.gmd | grep '\.info') -O | grep 'Package')
+	
+	gmissing=()
+	while read -r line; do
+		while read -r gem; do
+			if [ ! -e $gem ]; then
+				gem list ^${gem}$ -i > /dev/null
+				st=$?
+				if [ $st -eq 1 ]; then
+					success=0
+					gmissing+=( $gem )
+				fi
+			fi
+		done< <(awk -F':' '{ $1=""; print }' <<< $line | sed 's/^[ \t]*//; s/ //g; s/,/\n/g')
+	done< <(tar -xjSf $1.gmd --strip-components=1 $(tar -tjSf $1.gmd | grep '\.info') -O | grep 'Gem')
+}
+
+
 function _add_plugin
 {
 	cd ~/.gpm/plugins
 	
-	_get_pkg_deps "$1.gmd"
-	pd=$?
-	_get_gem_deps "$1.gmd"
-	gd=$?
-
 	echo -en "\e[0;37m[\e0m"
 	echo -en "\e[0;37m ] \e[1;37mInstalling plugin \e[1;36m$1\e[0;37m ...\r"
 	if [ ! -f $1.gmd ]; then
 		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[1;37mInstalling plugin \e[1;36m$1 \e[0;31mfailed\e[0m"
 	else
-		echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mInstalling plugin \e[1;36m$1 \e[0;32msuccess\e[0m"
+		_verify_deps $1
+		if [ $success -eq 1 ]; then
+			echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mInstalling plugin \e[1;36m$1 \e[0;32msuccess\e[0m"
+		else
+			echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[1;37mInstalling plugin \e[1;36m$1 \e[0;31mfailed\e[0m"
+			if [ ${#dmissing[@]} -ne 0 ]; then
+				echo -e "\e[1;31mThe following packages are missing:"
+				for i in "${dmissing[@]}"; do
+					echo -e "\e[0;31m$i\e[0m"
+				done
+				echo
+			fi
+			if [ ${#gmissing[@]} -ne 0 ]; then
+				echo -e "\e[1;31mThe following gems are missing:"
+				for i in "${gmissing[@]}"; do
+					echo -e "\e[0;31m$i\e[0m"
+				done
+			fi
+		fi
 	fi
 
 	echo
@@ -301,17 +334,31 @@ function _add_module
 {
 	cd ~/.gpm/modules
 	
-	_get_pkg_deps "$1.gmd"
-	pd=$?
-	_get_gem_deps "$1.gmd"
-	gd=$?
-	
 	echo -en "\e[0;37m[\e0m"
 	echo -en "\e[0;37m ] \e[1;37mInstalling module \e[1;36m$1\e[1;37m ...\r"
+
 	if [ ! -f $1.gmd ]; then
 		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[1;37mInstalling module \e[1;36m$1 \e[0;31mfailed\e[0m"
 	else
-		echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mInstalling module \e[1;36m$1 \e[0;32msuccess\e[0m"
+		_verify_deps $1
+		if [ $success -eq 1 ]; then
+			echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mInstalling module \e[1;36m$1 \e[0;32msuccess\e[0m"
+		else
+			echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[1;37mInstalling module \e[1;36m$1 \e[0;31mfailed\e[0m"
+			if [ ${#dmissing[@]} -gt 0 ]; then
+				echo -e "\e[1;31mThe following packages are missing:"
+				for i in "${dmissing[@]}"; do
+					echo -e "\e[0;31m$i\e[0m"
+				done
+				echo
+			fi
+			if [ ${#gmissing[@]} -gt 0 ]; then
+				echo -e "\e[1;31mThe following gems are missing:"
+				for i in "${gmissing[@]}"; do
+					echo -e "\e[0;31m$i\e[0m"
+				done
+			fi
+		fi
 	fi
 
 	echo
@@ -331,12 +378,141 @@ function _remove_module
 	echo
 }
 
-#trap cleanup SIGINT EXIT
+# gpm command help
+function _gpm_help
+{
+cat<<EOF
+gpm install	install genesis
+gpm uninstall	remove genesis
+gpm update	update genesis
+gpm list all	list all modules and plugins
+gpm list plugins	list all plugins
+gpm list modules	list all modules
+---	---
+gpm list_local all	list installed modules and plugins
+gpm list_local plugins	list installed plugins
+gpm list_local modules	list installed modules
+gpm list_remote all	list available modules and plugins
+gpm list_remote plugins	list available plugins
+gpm list_remote modules	list available modules
+gpm add plugin <plugin>	add plugin to genesis
+gpm remove plugin <plugin>	remove plugin from genesis
+gpm add module <module>	add module to genesis
+gpm remove module <module>	remove module from genesis
+---	---
+gpm help	display this help
+EOF
+	echo -en "\e[0m"	
+}
+
+trap cleanup SIGINT EXIT
 
 #install
-#_init
+_init
 
-_remove_module "test6"
-_remove_module "test"
+###---* SCRIPT START *---###
 
-_add_module "test6"
+if [[ "$1" == "help" ]] || [[ "$1" == "install" ]] || [[ "$1" == "uninstall" ]] || [[ "$1" == "update" ]]; then
+	if [ ! -z $2 ]; then
+		echo -e "\e[0;31mToo many arguments.\e[0m"
+		exit 1
+	fi
+fi
+
+if [ -e $1 ] || [[ "$1" == "help" ]]; then
+	echo -e "\e[1;37mUsage:\n\e[0;37m"
+	_gpm_help | sed 's/\t/,|,/g' | column -s ',' -t 2> /dev/null
+elif [[ "$1" == "install" ]]; then
+	if ! grep -q 'GENESIS_HOME' ~/.bashrc; then
+		_install
+	else
+		echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Genesis appears to already be installed. Aborting\e[0m"
+		exit 0
+	fi
+elif [[ "$1" == "add" ]]; then
+	if [ -z $2 ] || [ -z $3 ]; then
+		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mMissing arguments for \e[0;33m$@\e[0m"
+		echo
+		echo -e "\e[1;37mUsage:\n\e[0;37m"
+		_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm add' | column -s ',' -t 2> /dev/null
+	fi
+elif [[ "$1" == "remove" ]]; then
+	if [ -z $2 ] || [ -z $3 ]; then
+		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mMissing arguments for \e[0;33m$@\e[0m"
+		echo
+		echo -e "\e[1;37mUsage:\n\e[0;37m"
+		_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm remove' | column -s ',' -t 2> /dev/null
+	fi
+elif [[ "$1" == "list" ]]; then
+	if [ -z $2 ]; then
+		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mMissing arguments for \e[0;33m$@\e[0m"
+		echo
+		echo -e "\e[1;37mUsage:\n\e[0;37m"
+		_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm list' | column -s ',' -t 2> /dev/null
+	else
+		if [[ "$2" == "all" ]]; then
+			echo -e "\e[1;37mPlugins:\e[0m"
+			_list_plugins
+			echo
+			echo -e "\e[1;37mModules:\e[0m"
+			_list_modules
+		elif [[ "$2" == "modules" ]]; then
+			_list_modules
+		elif [[ "$2" == "plugins" ]]; then
+			_list_plugins
+		else
+			echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mUnknown option \e[0;33m$2\e[0m"
+			echo
+			echo -e "\e[1;37mUsage:\n\e[0;37m"
+			_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm list' | column -s ',' -t 2> /dev/null
+		fi
+	fi
+elif [[ "$1" == "list_local" ]]; then
+	if [ -z $2 ]; then
+		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mMissing arguments for \e[0;33m$@\e[0m"
+		echo
+		echo -e "\e[1;37mUsage:\n\e[0;37m"
+		_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm list_local' | column -s ',' -t 2> /dev/null
+	else
+		if [[ "$2" == "all" ]]; then
+			echo -e "\e[1;37mInstalled plugins:\e[0m"
+			_list_plugins | grep -w '*'
+			echo
+			echo -e "\e[1;37mInstalled modules:\e[0m"
+			_list_modules | grep -w '*'
+		elif [[ "$2" == "modules" ]]; then
+			_list_modules | grep -w '*'
+		elif [[ "$2" == "plugins" ]]; then
+			_list_plugins | grep -w '*'
+		else
+			echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mUnknown option \e[0;33m$2\e[0m"
+			echo
+			echo -e "\e[1;37mUsage:\n\e[0;37m"
+			_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm list_local' | column -s ',' -t 2> /dev/null
+		fi
+	fi
+elif [[ "$1" == "list_remote" ]]; then
+	if [ -z $2 ]; then
+		echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mMissing arguments for \e[0;33m$@\e[0m"
+		echo
+		echo -e "\e[1;37mUsage:\n\e[0;37m"
+		_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm list_remote' | column -s ',' -t 2> /dev/null
+	else
+		if [[ "$2" == "all" ]]; then
+			echo -e "\e[1;37mInstalled plugins:\e[0m"
+			_list_plugins | grep -w '[ ]'
+			echo
+			echo -e "\e[1;37mInstalled modules:\e[0m"
+			_list_modules | grep -w '[ ]'
+		elif [[ "$2" == "modules" ]]; then
+			_list_modules | grep -w '[ ]'
+		elif [[ "$2" == "plugins" ]]; then
+			_list_plugins | grep -w '[ ]'
+		else
+			echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mUnknown option \e[0;33m$2\e[0m"
+			echo
+			echo -e "\e[1;37mUsage:\n\e[0;37m"
+			_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm list_local' | column -s ',' -t 2> /dev/null
+		fi
+	fi
+fi

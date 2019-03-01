@@ -1,0 +1,6 @@
+gpm help	display help
+gpm install	install genesis
+gpm add module	add module to genesis
+gpm removed module	remove module from genesis
+gpm add plugin	add plugin to genesis
+gpm remove plugin	remove plugin from genesis
