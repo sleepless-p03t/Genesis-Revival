@@ -574,7 +574,9 @@ if [ -e $1 ] || [[ "$1" == "help" ]]; then
 	_gpm_help | sed 's/\t/,|,/g' | column -s ',' -t 2> /dev/null
 elif [[ "$1" == "install" ]]; then
 	if ! grep -q 'GENESIS_HOME' ~/.bashrc; then
-		_install
+		if [ ! -d ~/.gpm ]; then
+			_install
+		fi
 	else
 		echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Genesis appears to already be installed. Aborting\e[0m"
 		exit 0
