@@ -555,9 +555,11 @@ trap cleanup SIGINT EXIT
 
 ###---* SCRIPT START *---###
 
-if [ ! -d ~/.gpm/ ]; then
-	echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Genesis not found. Please run gpm install"
-	exit
+if [ -z $1 ]; then
+	if [ ! -d ~/.gpm/ ]; then
+		echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Genesis not found. Please run gpm install"
+		exit
+	fi
 fi
 
 _init
