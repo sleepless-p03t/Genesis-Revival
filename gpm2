@@ -553,15 +553,14 @@ EOF
 
 trap cleanup SIGINT EXIT
 
-#install
-_init
-
 ###---* SCRIPT START *---###
 
 if [ ! -d ~/.gpm/ ] || grep -q 'GENESIS_HOME' ~/.bashrc; then
 	echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Genesis not found. Please run gpm install"
 	exit
 fi
+
+_init
 
 if [[ "$1" == "help" ]] || [[ "$1" == "install" ]] || [[ "$1" == "uninstall" ]] || [[ "$1" == "update" ]]; then
 	if [ ! -z $2 ]; then
