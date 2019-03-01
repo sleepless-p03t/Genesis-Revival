@@ -61,6 +61,10 @@ function _download
 # remove any files that aren't new or modified
 function _init
 {
+	if [ ! -d ~/.gpm ]; then
+		mkdir ~/.gpm
+	fi
+	
 	local count
 
 	cd ~/.gpm
@@ -555,11 +559,9 @@ trap cleanup SIGINT EXIT
 
 ###---* SCRIPT START *---###
 
-if [ -z $1 ]; then
-	if [ ! -d ~/.gpm/ ]; then
-		echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Genesis not found. Please run gpm install"
-		exit
-	fi
+if ! grep -q 'GENESIS_HOME' ~/.bashrc || [ ! -d $GENESIS_HOME ]; then
+	echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Genesis not found. Please run gpm install"
+	exit
 fi
 
 _init
