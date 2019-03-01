@@ -3,6 +3,7 @@
 root=`pwd`
 RPATH="https://raw.githubusercontent.com/sleepless-p03t/Genesis-Revival/master"
 
+# remove files from ~/.gpm on exit
 function cleanup
 {
 	local count
@@ -19,11 +20,15 @@ function cleanup
 		if [ $count -ne 0 ]; then rm ~/.gpm/modules/*.gmd; fi
 		count=`ls -1 ~/.gpm/core/* 2> /dev/null | wc -l`
 		if [ $count -ne 0 ]; then rm ~/.gpm/core/*; fi
+		count=`ls -1 ~/.gpm/update/* 2> /dev/null | wc -l`
+		if [ $count -ne 0 ]; then rm -rf ~/.gpm/update/*; fi
+		rm ~/.gpm/master.list
 	fi
 
 	cd $root
 }
 
+# compare files by md5sums; 1 means diffent, 0 means same
 function _cmp_files
 {
 	local old new
@@ -38,6 +43,7 @@ function _cmp_files
 	fi
 }
 
+# attempt to download a file, exit on error
 function _download
 {
 	local _url="$1"
@@ -50,7 +56,6 @@ function _download
 		curl -s "$_url" -o "$_file"
 	fi
 }
-
 
 # download all files
 # remove any files that aren't new or modified
@@ -204,6 +209,7 @@ function _install
 	fi
 }
 
+# list all internals
 function _list_internals
 {
 	cd ~/.gpm
@@ -217,6 +223,7 @@ function _list_internals
 	done< <(awk '/INTERNALS_START/{flag=1;next}/INTERNALS_END/{flag=0}flag' master.list)
 }
 
+# list all plugins
 function _list_plugins
 {
 	cd ~/.gpm
@@ -230,12 +237,37 @@ function _list_plugins
 	done< <(awk '/PLUGIN_START/{flag=1;next}/PLUGIN_END/{flag=0}flag' master.list)
 }
 
+# list all local plugins
+function _list_plugins_local
+{
+	cd ~/.gpm
+	while read -r line; do
+		file=`awk -F'.' '{ print $1 }' <<< $line`
+		if [ -f $GENESIS_HOME/plugins/$line ]; then
+			echo -e "\e[0;37m[\e[1;32m*\e[0;37m] \e[1;36m$file\e[0m"
+		fi
+	done< <(awk '/PLUGIN_START/{flag=1;next}/PLUGIN_END/{flag=0}flag' master.list)
+}
+
+# list all remote plugins
+function _list_plugins_remote
+{
+	cd ~/.gpm
+	while read -r line; do
+		file=`awk -F'.' '{ print $1 }' <<< $line`
+		if [ ! -f $GENESIS_HOME/plugins/$line ]; then
+			echo -e "\e[0;37m[ ] \e[1;36m$file\e[0m"
+		fi
+	done< <(awk '/PLUGIN_START/{flag=1;next}/PLUGIN_END/{flag=0}flag' master.list)
+}
+
+# list all modules
 function _list_modules
 {
 	cd ~/.gpm
 	while read -r line; do
 		file=`awk -F'.' '{ print $1 }' <<< $line`
-		if [ -f $GENESIS_HOME/modules/$line ]; then
+			if [ -f $GENESIS_HOME/modules/$file.gmd ]; then
 			echo -e "\e[0;37m[\e[1;32m*\e[0;37m] \e[1;36m$file\e[0m"
 		else
 			echo -e "\e[0;37m[ ] \e[1;36m$file\e[0m"
@@ -243,6 +275,32 @@ function _list_modules
 	done< <(awk '/MODULE_START/{flag=1;next}/MODULE_END/{flag=0}flag' master.list)
 }
 
+# list all local modules
+function _list_modules_local
+{
+	cd ~/.gpm
+	while read -r line; do
+		file=`awk -F'.' '{ print $1 }' <<< $line`
+		if [ -f $GENESIS_HOME/modules/$file.gmd ]; then
+			echo -e "\e[0;37m[\e[1;32m*\e[0;37m] \e[1;36m$file\e[0m"
+		fi
+	done< <(awk '/MODULE_START/{flag=1;next}/MODULE_END/{flag=0}flag' master.list)
+}
+
+# list all remote modules
+function _list_modules_remote
+{
+	cd ~/.gpm
+	while read -r line; do
+		file=`awk -F'.' '{ print $1 }' <<< $line`
+		if [ ! -f $GENESIS_HOME/modules/$file.gmd ]; then
+			echo -e "\e[0;37m[ ] \e[1;36m$file\e[0m"
+		fi
+	done< <(awk '/MODULE_START/{flag=1;next}/MODULE_END/{flag=0}flag' master.list)
+}
+
+# verify module/plugin/internal dependencies
+# success is status code: 1 means all dependencies met, 0 means dependencies missing
 success=1
 dmissing=()
 gmissing=()
@@ -282,7 +340,7 @@ function _verify_deps
 	done< <(tar -xjSf $1.gmd --strip-components=1 $(tar -tjSf $1.gmd | grep '\.info') -O | grep 'Gem')
 }
 
-
+# install a new plugin
 function _add_plugin
 {
 	cd ~/.gpm/plugins
@@ -316,6 +374,7 @@ function _add_plugin
 	echo
 }
 
+# remove a plugin
 function _remove_plugin
 {
 	cd $GENESIS_HOME/plugins
@@ -330,6 +389,7 @@ function _remove_plugin
 	echo
 }
 
+# add a module
 function _add_module
 {
 	cd ~/.gpm/modules
@@ -364,6 +424,7 @@ function _add_module
 	echo
 }
 
+# remove a module
 function _remove_module
 {
 	cd $GENESIS_HOME/modules
@@ -376,6 +437,91 @@ function _remove_module
 	fi
 
 	echo
+}
+
+function _update
+{
+	local count p_list m_list i_list c_list file
+	p_list=()
+	m_list=()
+	c_list=()
+	i_list=()
+	cd ~/.gpm/update/
+
+	count=`ls -1 plugins/*.gmd 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			file=`awk -F'[/.]' '{ print $(NF-1) }' <<< $line`
+			p_list+=( $file )
+		done< <(ls plugins/*.gmd)
+	fi
+
+	count=`ls -1 modules/*.gmd 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			file=`awk -F'[/.]' '{ print $(NF-1) }' <<< $line`
+			m_list+=( $file )
+		done< <(ls modules/*.gmd)
+	fi
+
+	count=`ls -1 internals/*.gmd 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			file=`awk -F'[/.]' '{ print $(NF-1) }' <<< $line`
+			i_list+=( $file )
+		done< <(ls internals/*.gmd)
+	fi
+
+	count=`ls -1 core/* 2> /dev/null | wc -l`
+	if [ $count -ne 0 ]; then
+		while read -r line; do
+			file=`awk -F'/' '{ print $NF }' <<< $line`
+			c_list+=( $file )
+		done< <(ls core/*)
+	fi
+
+	if [ ${#p_list[@]} -ne 0 ] || [ ${#m_list[@]} -ne 0 ] || [ ${#i_list[@]} -ne 0 ] || [ ${#c_list[@]} -ne 0 ]; then
+		echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Updates are available\e[0m"
+		echo -en "  \e[1;37mWould you like to install them now? [Y/n]: \e[0m"
+		read -r ans
+		if [[ $ans =~ ^[Yy] ]]; then
+			if [ ${#c_list[@]} -ne 0 ]; then
+				echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Updating core:\e[0m"
+				for i in "${c_list[@]}"; do
+					echo -en "\e[0;37m[ ] \e[1;37mCopying new version of \e[1;36m$i\e[1;37m into \e[1;34m$GENESIS_HOME/ \e[1;37m...\e[0m\r"
+					cp core/$i $GENESIS_HOME/
+					echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mCopying new version of \e[1;36m$i\e[1;37m into \e[1;34m$GENESIS_HOME/ \e[0;32mdone\e[0m"
+				done
+			fi
+
+			if [ ${#i_list[@]} -ne 0 ]; then
+				echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Updating internals:\e[0m"
+				for i in "${i_list[@]}"; do
+					echo -en "\e[0;37m[ ] \e[1;37mCopying new version of \e[1;36m$i\e[1;37m into \e[1;34m$GENESIS_HOME/.core/internals/ \e[1;37m...\e[0m\r"
+					cp internals/$i.gmd $GENESIS_HOME/.core/internals/
+					echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mCopying new version of \e[1;36m$i\e[1;37m into \e[1;34m$GENESIS_HOME/.core/internals/ \e[0;32mdone\e[0m"
+				done
+			fi
+
+			if [ ${#p_list[@]} -ne 0 ]; then
+				echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Updating plugins:\e[0m"
+				for i in "${p_list[@]}"; do
+					echo -en "\e[0;37m[ ] \e[1;37mCopying new version of \e[1;36m$i\e[1;37m into \e[1;34m$GENESIS_HOME/plugins/ \e[1;37m...\e[0m\r"
+					cp plugins/$i.gmd $GENESIS_HOME/plugins/
+					echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mCopying new version of \e[1;36m$i\e[1;37m into \e[1;34m$GENESIS_HOME/plugins \e[0;32mdone\e[0m"
+				done
+			fi
+
+			if [ ${#m_list[@]} -ne 0 ]; then
+				echo -e "\e[0;37m[\e[1;34mi\e[0;37m] Updating modules:\e[0m"
+				for i in "${m_list[@]}"; do
+					echo -en "\e[0;37m[ ] \e[1;37mCopying new version of \e[1;36m$i\e[1;37m into \e[1;34m$GENESIS_HOME/modules/ \e[1;37m...\e[0m\r"
+					cp modules/$i $GENESIS_HOME/modules/
+					echo -e "\e[0;37m[\e[1;32m+\e[0;37m] \e[1;37mCopying new version of \e[1;36m$i\e[1;37m into \e[1;34m$GENESIS_HOME/modules/ \e[0;32mdone\e[0m"
+				done
+			fi
+		fi
+	fi
 }
 
 # gpm command help
@@ -476,14 +622,14 @@ elif [[ "$1" == "list_local" ]]; then
 	else
 		if [[ "$2" == "all" ]]; then
 			echo -e "\e[1;37mInstalled plugins:\e[0m"
-			_list_plugins | grep -w '*'
+			_list_plugins_local
 			echo
 			echo -e "\e[1;37mInstalled modules:\e[0m"
-			_list_modules | grep -w '*'
+			_list_modules_local
 		elif [[ "$2" == "modules" ]]; then
-			_list_modules | grep -w '*'
+			_list_modules_local
 		elif [[ "$2" == "plugins" ]]; then
-			_list_plugins | grep -w '*'
+			_list_plugins_local
 		else
 			echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mUnknown option \e[0;33m$2\e[0m"
 			echo
@@ -499,20 +645,20 @@ elif [[ "$1" == "list_remote" ]]; then
 		_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm list_remote' | column -s ',' -t 2> /dev/null
 	else
 		if [[ "$2" == "all" ]]; then
-			echo -e "\e[1;37mInstalled plugins:\e[0m"
-			_list_plugins | grep -w '[ ]'
+			echo -e "\e[1;37mAvailable plugins:\e[0m"
+			_list_plugins_remote
 			echo
-			echo -e "\e[1;37mInstalled modules:\e[0m"
-			_list_modules | grep -w '[ ]'
+			echo -e "\e[1;37mAvailable modules:\e[0m"
+			_list_modules_remote
 		elif [[ "$2" == "modules" ]]; then
-			_list_modules | grep -w '[ ]'
+			_list_modules_remote
 		elif [[ "$2" == "plugins" ]]; then
-			_list_plugins | grep -w '[ ]'
+			_list_plugins_remote
 		else
 			echo -e "\e[0;37m[\e[1;31m!\e[0;37m] \e[0;31mUnknown option \e[0;33m$2\e[0m"
 			echo
 			echo -e "\e[1;37mUsage:\n\e[0;37m"
-			_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm list_local' | column -s ',' -t 2> /dev/null
+			_gpm_help | sed 's/\t/,|,/g' | grep -w 'gpm list_remote' | column -s ',' -t 2> /dev/null
 		fi
 	fi
 fi
