@@ -1,0 +1,37 @@
+Genesis 6.1 (Revival)
+
+[X] Module data localization: load/unload parses configs and adds/removes data from tab completion hashes
+
+[X] Module improvements:
+[X] Optional vs required variables (set)
+
+[X ] Generate not required?
+
+[ ] Core improvements:
+[X] Only pre-parse module names for load tab completion
+
+[ ] Plugin based extensions for modules
+[ ] (Metasploit, elevation, etc)
+[X] Clean up tab completion lookups
+[ ] Clean up plugin modifiers
+
+[ ] Plugins:
+[ ] Underhanded_Admin_Compromiser
+[ ] FS
+[ ] ———————
+
+[ ] Improve directory paths
+[ ] Breakup plugins like modules
+[X] Move initial unpacking of modules to load/unload functions
+
+[ ] Modify plugin extensions within modules
+
+———————
+
+[ ] Improve gpm
+
+———————
+
+[ ] MS_Poison
+[ ] VBScript MS Macro poisoner
+[ ] RegKey safe file
