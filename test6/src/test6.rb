@@ -26,7 +26,8 @@ def hi
 	# display an error message if variable greeting not set
 	if RuntimeStore.get_val_of("greeting") != nil
 		# display value of greeting
-		Output.info_msg("greeting =", RuntimeStore.get_val_of("testr"))
+		puts RuntimeStore.get_val_of("greeting")
+		#Output.info_msg("greeting =", RuntimeStore.get_val_of("greeting"))
 	else
 		Output.err_msg("Variable greeting not set!", "")
 	end
