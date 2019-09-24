@@ -113,8 +113,10 @@ extract_core
 # command line args
 flag = ARGV[0]
 
+
+
 # icon output
-if flag != '-q'
+if flag != '-q' && flag != '-j'
 	# choose random icon based on terminal size
 	cols = `tput cols | tr -d '\n'`.to_i
 	if cols > 96
@@ -153,6 +155,12 @@ if flag != '-q'
 	elsif flag != "-r"
 		a.animate(Color.LIGHT_WHITE, nil)
 	end
+end
+
+allowExit = true
+
+if flag == '-j'
+	allowExit = false
 end
 
 # Dynamic tab completion control system
@@ -227,10 +235,12 @@ while buf = Readline.readline("\e[1;37m#{prompt} \e[1;33m#{_module}\e[1;37m> \e[
 	# initiate history
 	Readline::HISTORY.to_a
 	if buf.start_with?("exit")
-		# append history to .history file
-		History.write_history(Readline::HISTORY.to_a)
-		system("rm -rf .runtime/")
-		break
+		if allowExit
+			# append history to .history file
+			History.write_history(Readline::HISTORY.to_a)
+			system("rm -rf .runtime/")
+			break
+		end
 	end
 	
 	# clear/cls screen
